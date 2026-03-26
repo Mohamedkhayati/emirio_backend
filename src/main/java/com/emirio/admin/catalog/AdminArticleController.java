@@ -4,13 +4,23 @@ import com.emirio.catalog.Article;
 import com.emirio.catalog.Category;
 import com.emirio.catalog.repo.ArticleRepository;
 import com.emirio.catalog.repo.CategoryRepository;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
+
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @RestController
 @RequestMapping("/api/admin/articles")
@@ -32,102 +42,186 @@ public class AdminArticleController {
 
   @GetMapping("/{id}")
   public ArticleDto details(@PathVariable Long id) {
-    return ArticleDto.from(articles.findById(id).orElseThrow());
+    return ArticleDto.from(findArticle(id));
   }
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ArticleDto create(
-    @RequestPart("data") CreateReq req,
+    @RequestPart("data") @Valid CreateReq req,
     @RequestPart(value = "image1", required = false) MultipartFile image1,
     @RequestPart(value = "image2", required = false) MultipartFile image2,
     @RequestPart(value = "image3", required = false) MultipartFile image3,
     @RequestPart(value = "image4", required = false) MultipartFile image4
   ) throws IOException {
-    Category cat = categories.findById(req.getCategorieId()).orElseThrow();
-    Article a = new Article();
-    fill(a, req, cat, image1, image2, image3, image4);
-    return ArticleDto.from(articles.save(a));
+    validateArticleRequest(req, null);
+    Category cat = findCategory(req.getCategorieId());
+    Article article = new Article();
+    fill(article, req, cat, image1, image2, image3, image4);
+    return ArticleDto.from(articles.save(article));
   }
 
   @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ArticleDto update(
     @PathVariable Long id,
-    @RequestPart("data") CreateReq req,
+    @RequestPart("data") @Valid CreateReq req,
     @RequestPart(value = "image1", required = false) MultipartFile image1,
     @RequestPart(value = "image2", required = false) MultipartFile image2,
     @RequestPart(value = "image3", required = false) MultipartFile image3,
     @RequestPart(value = "image4", required = false) MultipartFile image4
   ) throws IOException {
-    Category cat = categories.findById(req.getCategorieId()).orElseThrow();
-    Article a = articles.findById(id).orElseThrow();
-    fill(a, req, cat, image1, image2, image3, image4);
-    return ArticleDto.from(articles.save(a));
+    validateArticleRequest(req, id);
+    Category cat = findCategory(req.getCategorieId());
+    Article article = findArticle(id);
+    fill(article, req, cat, image1, image2, image3, image4);
+    return ArticleDto.from(articles.save(article));
   }
 
   @DeleteMapping("/{id}")
   public void delete(@PathVariable Long id) {
-    articles.deleteById(id);
+    Article article = findArticle(id);
+    articles.delete(article);
+  }
+
+  private Article findArticle(Long id) {
+    return articles.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Article not found"));
+  }
+
+  private Category findCategory(Long id) {
+    return categories.findById(id)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Category not found"));
+  }
+
+  private void validateArticleRequest(CreateReq req, Long articleId) {
+    if (req.getCategorieId() == null) {
+      throw new ResponseStatusException(BAD_REQUEST, "Category is required");
+    }
+
+    if (req.getPrix() <= 0) {
+      throw new ResponseStatusException(BAD_REQUEST, "Price must be greater than 0");
+    }
+
+    if (req.getSalePrice() != null) {
+      if (req.getSalePrice() <= 0) {
+        throw new ResponseStatusException(BAD_REQUEST, "Sale price must be greater than 0");
+      }
+      if (req.getSalePrice() >= req.getPrix()) {
+        throw new ResponseStatusException(BAD_REQUEST, "Sale price must be lower than price");
+      }
+    }
+
+    if (req.getSaleStartAt() != null && req.getSaleEndAt() != null && req.getSaleEndAt().isBefore(req.getSaleStartAt())) {
+      throw new ResponseStatusException(BAD_REQUEST, "Sale end date must be after sale start date");
+    }
+
+    String sku = normalize(req.getSku());
+    if (sku != null) {
+      boolean exists = articleId == null
+        ? articles.existsBySkuIgnoreCase(sku)
+        : articles.existsBySkuIgnoreCaseAndIdNot(sku, articleId);
+      if (exists) {
+        throw new ResponseStatusException(BAD_REQUEST, "SKU already exists");
+      }
+    }
+  }
+
+  private String normalize(String value) {
+    if (value == null) return null;
+    String v = value.trim();
+    return v.isEmpty() ? null : v;
   }
 
   private void fill(
-    Article a,
+    Article article,
     CreateReq req,
-    Category cat,
+    Category category,
     MultipartFile image1,
     MultipartFile image2,
     MultipartFile image3,
     MultipartFile image4
   ) throws IOException {
-    a.setNom(req.getNom());
-    a.setDescription(req.getDescription());
-    a.setDetails(req.getDetails());
-    a.setPrix(req.getPrix());
-    a.setActif(req.isActif());
-    a.setCategorie(cat);
-    a.setMarque(req.getMarque());
-    a.setMatiere(req.getMatiere());
-    a.setSku(req.getSku());
-    a.setRecommended(req.isRecommended());
-    a.setSalePrice(req.getSalePrice());
-    a.setSaleStartAt(req.getSaleStartAt());
-    a.setSaleEndAt(req.getSaleEndAt());
+    article.setNom(req.getNom().trim());
+    article.setDescription(trimToNull(req.getDescription()));
+    article.setDetails(trimToNull(req.getDetails()));
+    article.setPrix(req.getPrix());
+    article.setActif(req.isActif());
+    article.setCategorie(category);
+    article.setMarque(trimToNull(req.getMarque()));
+    article.setMatiere(trimToNull(req.getMatiere()));
+    article.setSku(trimToNull(req.getSku()));
+    article.setRecommended(req.isRecommended());
+    article.setSalePrice(req.getSalePrice());
+    article.setSaleStartAt(req.getSaleStartAt());
+    article.setSaleEndAt(req.getSaleEndAt());
 
-    if (image1 != null && !image1.isEmpty()) {
-      a.setImageData1(image1.getBytes());
-      a.setImageName1(image1.getOriginalFilename());
-      a.setImageType1(image1.getContentType());
+    applyImage(article, 1, image1);
+    applyImage(article, 2, image2);
+    applyImage(article, 3, image3);
+    applyImage(article, 4, image4);
+  }
+
+  private String trimToNull(String value) {
+    if (value == null) return null;
+    String v = value.trim();
+    return v.isEmpty() ? null : v;
+  }
+
+  private void applyImage(Article article, int index, MultipartFile file) throws IOException {
+    if (file == null || file.isEmpty()) {
+      return;
     }
-    if (image2 != null && !image2.isEmpty()) {
-      a.setImageData2(image2.getBytes());
-      a.setImageName2(image2.getOriginalFilename());
-      a.setImageType2(image2.getContentType());
-    }
-    if (image3 != null && !image3.isEmpty()) {
-      a.setImageData3(image3.getBytes());
-      a.setImageName3(image3.getOriginalFilename());
-      a.setImageType3(image3.getContentType());
-    }
-    if (image4 != null && !image4.isEmpty()) {
-      a.setImageData4(image4.getBytes());
-      a.setImageName4(image4.getOriginalFilename());
-      a.setImageType4(image4.getContentType());
+
+    if (index == 1) {
+      article.setImageData1(file.getBytes());
+      article.setImageName1(file.getOriginalFilename());
+      article.setImageType1(file.getContentType());
+    } else if (index == 2) {
+      article.setImageData2(file.getBytes());
+      article.setImageName2(file.getOriginalFilename());
+      article.setImageType2(file.getContentType());
+    } else if (index == 3) {
+      article.setImageData3(file.getBytes());
+      article.setImageName3(file.getOriginalFilename());
+      article.setImageType3(file.getContentType());
+    } else if (index == 4) {
+      article.setImageData4(file.getBytes());
+      article.setImageName4(file.getOriginalFilename());
+      article.setImageType4(file.getContentType());
     }
   }
 
   @Data
   public static class CreateReq {
+    @NotBlank
+    @Size(max = 180)
     private String nom;
+
+    @Size(max = 2000)
     private String description;
+
+    @Size(max = 6000)
     private String details;
+
+    @DecimalMin(value = "0.001")
     private double prix;
-    private boolean actif;
+
+    private boolean actif = true;
+
+    @NotNull
     private Long categorieId;
+
+    @Size(max = 160)
     private String marque;
+
+    @Size(max = 160)
     private String matiere;
+
+    @Size(max = 120)
     private String sku;
+
     private Double salePrice;
-    private java.time.LocalDateTime saleStartAt;
-    private java.time.LocalDateTime saleEndAt;
+    private LocalDateTime saleStartAt;
+    private LocalDateTime saleEndAt;
     private boolean recommended;
   }
 
@@ -146,29 +240,29 @@ public class AdminArticleController {
     private String sku;
     private String imageUrl;
     private Double salePrice;
-    private java.time.LocalDateTime saleStartAt;
-    private java.time.LocalDateTime saleEndAt;
+    private LocalDateTime saleStartAt;
+    private LocalDateTime saleEndAt;
     private boolean recommended;
 
-    static ArticleDto from(Article a) {
-      ArticleDto d = new ArticleDto();
-      d.id = a.getId();
-      d.nom = a.getNom();
-      d.description = a.getDescription();
-      d.details = a.getDetails();
-      d.prix = a.getPrix();
-      d.actif = a.isActif();
-      d.categorieId = a.getCategorie() != null ? a.getCategorie().getId() : null;
-      d.categorieNom = a.getCategorie() != null ? a.getCategorie().getNom() : null;
-      d.marque = a.getMarque();
-      d.matiere = a.getMatiere();
-      d.sku = a.getSku();
-      d.imageUrl = a.getImageData1() != null ? "/api/articles/" + a.getId() + "/image/1" : null;
-      d.salePrice = a.getSalePrice();
-      d.saleStartAt = a.getSaleStartAt();
-      d.saleEndAt = a.getSaleEndAt();
-      d.recommended = a.isRecommended();
-      return d;
+    static ArticleDto from(Article article) {
+      ArticleDto dto = new ArticleDto();
+      dto.id = article.getId();
+      dto.nom = article.getNom();
+      dto.description = article.getDescription();
+      dto.details = article.getDetails();
+      dto.prix = article.getPrix();
+      dto.actif = article.isActif();
+      dto.categorieId = article.getCategorie() != null ? article.getCategorie().getId() : null;
+      dto.categorieNom = article.getCategorie() != null ? article.getCategorie().getNom() : null;
+      dto.marque = article.getMarque();
+      dto.matiere = article.getMatiere();
+      dto.sku = article.getSku();
+      dto.imageUrl = article.getImageData1() != null ? "/api/articles/" + article.getId() + "/image/1" : null;
+      dto.salePrice = article.getSalePrice();
+      dto.saleStartAt = article.getSaleStartAt();
+      dto.saleEndAt = article.getSaleEndAt();
+      dto.recommended = article.isRecommended();
+      return dto;
     }
   }
 }

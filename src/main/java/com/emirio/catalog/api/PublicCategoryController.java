@@ -5,6 +5,7 @@ import com.emirio.catalog.repo.CategoryRepository;
 import lombok.Data;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Comparator;
 import java.util.List;
 
 @RestController
@@ -20,7 +21,10 @@ public class PublicCategoryController {
 
   @GetMapping
   public List<CategoryDto> list() {
-    return repo.findAll().stream().map(CategoryDto::from).toList();
+    return repo.findAll().stream()
+      .sorted(Comparator.comparing(Category::getNom, String.CASE_INSENSITIVE_ORDER))
+      .map(CategoryDto::from)
+      .toList();
   }
 
   @Data

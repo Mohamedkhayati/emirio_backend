@@ -3,4 +3,10 @@ package com.emirio.catalog.repo;
 import com.emirio.catalog.Category;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface CategoryRepository extends JpaRepository<Category, Long> {}
+import java.util.List;
+
+public interface CategoryRepository extends JpaRepository<Category, Long> {
+  boolean existsByNomIgnoreCase(String nom);
+  boolean existsByNomIgnoreCaseAndIdNot(String nom, Long id);
+  List<Category> findAllByOrderByNomAsc();
+}

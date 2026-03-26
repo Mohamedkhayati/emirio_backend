@@ -17,8 +17,8 @@ public class ArticleReview {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @ManyToOne(fetch = FetchType.LAZY, optional = false)
-  @JoinColumn(name = "article_id")
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "article_id", nullable = false)
   private Article article;
 
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -33,4 +33,5 @@ public class ArticleReview {
 
   @Column(nullable = false)
   private LocalDateTime createdAt = LocalDateTime.now();
+  
 }

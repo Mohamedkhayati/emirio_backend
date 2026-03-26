@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Getter
@@ -99,4 +101,6 @@ public class Article {
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "categorie_id")
   private Category categorie;
+  @OneToMany(mappedBy = "article", cascade = CascadeType.ALL, orphanRemoval = true)
+  private List<ArticleReview> reviews = new ArrayList<>();
 }
