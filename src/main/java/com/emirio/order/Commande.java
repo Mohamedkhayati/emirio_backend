@@ -55,10 +55,9 @@ public class Commande {
 
     private String codePostal;
 
-    @Column(nullable = false)
-    private String modePaiement;
+    @Enumerated(EnumType.STRING)
+    private ModePaiement modePaiement;
 
-    private String cardLast4;
 
     @Column(length = 1000)
     private String note;
@@ -86,4 +85,27 @@ public class Commande {
         ligne.setCommande(this);
         this.lignes.add(ligne);
     }
+   
+
+    @Enumerated(EnumType.STRING)
+    private StatutPaiement statutPaiement = StatutPaiement.EN_ATTENTE_VERIFICATION;
+
+    private String cardLast4;
+    private String d17Phone;
+    private String d17Reference;
+    private String bankReference;
+
+    @Column(length = 2000)
+    private String paymentInstructions;
+
+    @Column(length = 500000)
+    private String signatureDataUrl;
+
+    private LocalDateTime signedAt;
+    private String invoiceNumber;
+    private String invoiceUrl;
+    private LocalDateTime deliveredAt;
+
+    @Column(length = 1000)
+    private String adminDecisionNote;
 }

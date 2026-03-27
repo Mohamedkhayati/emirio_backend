@@ -72,7 +72,7 @@ public class CommandeResponse {
         dto.setAdresse(c.getAdresse());
         dto.setVille(c.getVille());
         dto.setCodePostal(c.getCodePostal());
-        dto.setModePaiement(c.getModePaiement());
+        dto.setModePaiement(c.getModePaiement() != null ? c.getModePaiement().name() : null);
         dto.setNote(c.getNote());
         dto.setLignes(
             c.getLignes().stream()

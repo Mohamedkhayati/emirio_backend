@@ -1,5 +1,6 @@
 package com.emirio.order;
 
+import com.emirio.admin.OrderMailService;
 import com.emirio.cart.LignePanier;
 import com.emirio.cart.Panier;
 import com.emirio.cart.repo.PanierRepository;
@@ -9,15 +10,17 @@ import com.emirio.user.UserRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
+import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.security.core.Authentication;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.springframework.http.HttpStatus.*;
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -27,15 +30,21 @@ public class OrderController {
     private final CommandeRepository commandes;
     private final PanierRepository paniers;
     private final UserRepository users;
+    private final OrderCheckoutService orderCheckoutService;
+    private final OrderMailService orderMailService;
 
     public OrderController(
         CommandeRepository commandes,
         PanierRepository paniers,
-        UserRepository users
+        UserRepository users,
+        OrderCheckoutService orderCheckoutService,
+        OrderMailService orderMailService
     ) {
         this.commandes = commandes;
         this.paniers = paniers;
         this.users = users;
+        this.orderCheckoutService = orderCheckoutService;
+        this.orderMailService = orderMailService;
     }
 
     @PostMapping("/checkout")
@@ -62,7 +71,7 @@ public class OrderController {
         commande.setAdresse(req.getAdresse());
         commande.setVille(req.getVille());
         commande.setCodePostal(req.getCodePostal());
-        commande.setModePaiement(req.getModePaiement());
+        commande.setModePaiement(parseModePaiement(req.getModePaiement()));
         commande.setCardLast4(req.getCardLast4());
         commande.setNote(req.getNote());
         commande.setArchived(false);
@@ -90,9 +99,20 @@ public class OrderController {
 
         Commande saved = commandes.save(commande);
 
+        saved.setInvoiceNumber(buildInvoiceNumber(saved));
+        saved.setInvoiceUrl(orderCheckoutService.generateInvoiceUrl(saved));
+        saved.setPaymentInstructions(buildPaymentInstructions(saved));
+
+        saved = commandes.save(saved);
+
         panier.getLignes().clear();
         panier.setDateMaj(LocalDateTime.now());
         paniers.save(panier);
+
+        try {
+            orderMailService.sendInvoiceEmail(saved);
+        } catch (Exception ignored) {
+        }
 
         return toDetailsDto(saved);
     }
@@ -150,6 +170,46 @@ public class OrderController {
         return v == null || v.isBlank();
     }
 
+    private String buildInvoiceNumber(Commande c) {
+        if (!isBlank(c.getInvoiceNumber())) {
+            return c.getInvoiceNumber();
+        }
+        if (!isBlank(c.getReferenceCommande())) {
+            return c.getReferenceCommande();
+        }
+        return "CMD-" + c.getId();
+    }
+
+    private String buildPaymentInstructions(Commande c) {
+        String mode = c.getModePaiement() == null ? "" : c.getModePaiement().name();
+
+        if ("LIVRAISON".equalsIgnoreCase(mode)) {
+            return "Paiement à la livraison.";
+        }
+
+        if ("CARTE".equalsIgnoreCase(mode)) {
+            String last4 = c.getCardLast4() == null ? "" : c.getCardLast4();
+            return "Paiement par carte" + (last4.isBlank() ? "." : " - carte ****" + last4 + ".");
+        }
+
+        if ("D17".equalsIgnoreCase(mode)) {
+            return "Veuillez effectuer le paiement via D17 et conserver la référence de paiement.";
+        }
+
+        if ("VIREMENT".equalsIgnoreCase(mode)) {
+            return "Veuillez effectuer le virement bancaire et conserver la référence du virement.";
+        }
+
+        return "Suivez les instructions de paiement envoyées par email.";
+    }
+
+    private ModePaiement parseModePaiement(String value) {
+        if (value == null || value.isBlank()) {
+            return ModePaiement.LIVRAISON;
+        }
+        return ModePaiement.valueOf(value.trim().toUpperCase());
+    }
+
     private User currentUser(Authentication authentication) {
         if (authentication == null || authentication.getName() == null) {
             throw new ResponseStatusException(UNAUTHORIZED, "Unauthorized");
@@ -176,6 +236,7 @@ public class OrderController {
         d.setReferenceCommande(c.getReferenceCommande());
         d.setDateCommande(c.getDateCommande());
         d.setStatutCommande(c.getStatutCommande().name());
+        d.setStatutPaiement(c.getStatutPaiement() != null ? c.getStatutPaiement().name() : null);
         d.setTotal(c.getTotal());
         d.setArchived(c.isArchived());
         d.setCancelable(c.getStatutCommande() == StatutCommande.EN_ATTENTE);
@@ -186,8 +247,11 @@ public class OrderController {
         d.setAdresse(c.getAdresse());
         d.setVille(c.getVille());
         d.setCodePostal(c.getCodePostal());
-        d.setModePaiement(c.getModePaiement());
+        d.setModePaiement(c.getModePaiement() != null ? c.getModePaiement().name() : null);
         d.setNote(c.getNote());
+        d.setInvoiceNumber(c.getInvoiceNumber());
+        d.setInvoiceUrl(c.getInvoiceUrl());
+        d.setPaymentInstructions(c.getPaymentInstructions());
 
         List<OrderLineDto> lines = c.getLignes().stream().map(l -> {
             OrderLineDto x = new OrderLineDto();
@@ -248,6 +312,7 @@ public class OrderController {
         private String referenceCommande;
         private LocalDateTime dateCommande;
         private String statutCommande;
+        private String statutPaiement;
         private double total;
         private boolean archived;
         private boolean cancelable;
@@ -260,6 +325,9 @@ public class OrderController {
         private String codePostal;
         private String modePaiement;
         private String note;
+        private String invoiceNumber;
+        private String invoiceUrl;
+        private String paymentInstructions;
         private List<OrderLineDto> lignes;
     }
 

@@ -1,110 +1,113 @@
 package com.emirio.admin;
 
 import com.emirio.order.Commande;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class OrderMailService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.username}")
+    @Value("${spring.mail.username:no-reply@emirio.tn}")
     private String from;
 
-    @Async
-    public void sendConfirmedEmail(Commande c) {
-        send(
-            c,
-            "Order confirmed - " + ref(c),
-            """
-            Hello %s,
-
-            Your order %s has been confirmed successfully.
-            Current status: %s
-            Total: %s TND
-
-            Thank you for shopping with EMIRIO.
-            """
-                .formatted(fullName(c), ref(c), c.getStatutCommande(), c.getTotal())
-        );
+    public OrderMailService(JavaMailSender mailSender) {
+        this.mailSender = mailSender;
     }
 
-    @Async
-    public void sendCancelledEmail(Commande c) {
-        send(
-            c,
-            "Order cancelled - " + ref(c),
-            """
-            Hello %s,
-
-            Your order %s has been cancelled.
-            If you need help, please contact our support team.
-
-            Thank you,
-            EMIRIO
-            """
-                .formatted(fullName(c), ref(c))
-        );
+    private String safe(String v) {
+        return v == null ? "" : v;
     }
 
-    @Async
-    public void sendArchivedEmail(Commande c) {
-        send(
-            c,
-            "Order archived - " + ref(c),
-            """
-            Hello %s,
-
-            Your order %s has been archived in our system.
-            This is an internal organization action and your order history remains محفوظ.
-
-            Regards,
-            EMIRIO
-            """
-                .formatted(fullName(c), ref(c))
-        );
-    }
-
-    private void send(Commande c, String subject, String text) {
-        if (c == null || c.getEmailClient() == null || c.getEmailClient().isBlank()) {
-            log.warn("Mail skipped: missing customer email for order {}", c != null ? c.getId() : null);
-            return;
-        }
+    private void send(String to, String subject, String body) {
+        if (to == null || to.isBlank()) return;
 
         try {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(from);
-            message.setTo(c.getEmailClient());
+            message.setTo(to);
             message.setSubject(subject);
-            message.setText(text);
+            message.setText(body);
             mailSender.send(message);
-
-            log.info("Mail sent to {} for order {}", c.getEmailClient(), c.getId());
-        } catch (Exception e) {
-            log.error("Failed to send mail to {} for order {}", c.getEmailClient(), c.getId(), e);
+        } catch (Exception ignored) {
         }
     }
 
-    private String safe(String v) {
-        return v == null ? "" : v.trim();
+    public void sendInvoiceEmail(Commande c) {
+        send(
+            c.getEmailClient(),
+            "Facture - " + safe(c.getReferenceCommande()),
+            "Bonjour " + safe(c.getPrenomClient()) + " " + safe(c.getNomClient()) + ",\n\n" +
+            "Votre commande a bien été enregistrée.\n\n" +
+            "Référence commande : " + safe(c.getReferenceCommande()) + "\n" +
+            "Numéro facture : " + safe(c.getInvoiceNumber()) + "\n" +
+            "Mode de paiement : " + (c.getModePaiement() == null ? "" : c.getModePaiement().name()) + "\n" +
+            "Instructions de paiement : " + safe(c.getPaymentInstructions()) + "\n" +
+            "Lien facture : " + safe(c.getInvoiceUrl()) + "\n\n" +
+            "EMIRIO"
+        );
     }
 
-    private String fullName(Commande c) {
-        String full = (safe(c.getPrenomClient()) + " " + safe(c.getNomClient())).trim();
-        return full.isBlank() ? "customer" : full;
+    public void sendConfirmedEmail(Commande c) {
+        send(
+            c.getEmailClient(),
+            "Commande confirmée - " + safe(c.getReferenceCommande()),
+            "Bonjour " + safe(c.getPrenomClient()) + " " + safe(c.getNomClient()) + ",\n\n" +
+            "Votre commande " + safe(c.getReferenceCommande()) + " a été confirmée.\n\nEMIRIO"
+        );
     }
 
-    private String ref(Commande c) {
-        return c.getReferenceCommande() != null && !c.getReferenceCommande().isBlank()
-            ? c.getReferenceCommande()
-            : "#" + c.getId();
+    public void sendCancelledEmail(Commande c) {
+        send(
+            c.getEmailClient(),
+            "Commande annulée - " + safe(c.getReferenceCommande()),
+            "Bonjour " + safe(c.getPrenomClient()) + " " + safe(c.getNomClient()) + ",\n\n" +
+            "Votre commande " + safe(c.getReferenceCommande()) + " a été annulée.\n\nEMIRIO"
+        );
+    }
+
+    public void sendArchivedEmail(Commande c) {
+        send(
+            c.getEmailClient(),
+            "Commande archivée - " + safe(c.getReferenceCommande()),
+            "Bonjour " + safe(c.getPrenomClient()) + " " + safe(c.getNomClient()) + ",\n\n" +
+            "Votre commande " + safe(c.getReferenceCommande()) + " a été archivée.\n\nEMIRIO"
+        );
+    }
+
+    public void sendPaymentAcceptedEmail(Commande c) {
+        send(
+            c.getEmailClient(),
+            "Paiement accepté - " + safe(c.getReferenceCommande()),
+            "Bonjour " + safe(c.getPrenomClient()) + " " + safe(c.getNomClient()) + ",\n\n" +
+            "Votre paiement a été accepté pour la commande " + safe(c.getReferenceCommande()) + ".\n" +
+            "Numéro facture : " + safe(c.getInvoiceNumber()) + "\n" +
+            "Lien facture : " + safe(c.getInvoiceUrl()) + "\n\n" +
+            "EMIRIO"
+        );
+    }
+
+    public void sendPaymentRejectedEmail(Commande c) {
+        send(
+            c.getEmailClient(),
+            "Paiement refusé - " + safe(c.getReferenceCommande()),
+            "Bonjour " + safe(c.getPrenomClient()) + " " + safe(c.getNomClient()) + ",\n\n" +
+            "Votre paiement a été refusé pour la commande " + safe(c.getReferenceCommande()) + ".\n" +
+            "Instructions de paiement : " + safe(c.getPaymentInstructions()) + "\n" +
+            "Lien facture : " + safe(c.getInvoiceUrl()) + "\n\n" +
+            "EMIRIO"
+        );
+    }
+
+    public void sendDeliveredEmail(Commande c) {
+        send(
+            c.getEmailClient(),
+            "Commande livrée - " + safe(c.getReferenceCommande()),
+            "Bonjour " + safe(c.getPrenomClient()) + " " + safe(c.getNomClient()) + ",\n\n" +
+            "Votre commande " + safe(c.getReferenceCommande()) + " a été marquée comme livrée.\n\nEMIRIO"
+        );
     }
 }

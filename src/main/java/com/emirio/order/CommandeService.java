@@ -37,6 +37,13 @@ public class CommandeService {
         return userRepository.findByEmail(email).orElseThrow();
     }
 
+    private ModePaiement parseModePaiement(String value) {
+        if (value == null || value.isBlank()) {
+            return ModePaiement.LIVRAISON;
+        }
+        return ModePaiement.valueOf(value.trim().toUpperCase());
+    }
+
     @Transactional
     public CommandeResponse checkout(String email, CheckoutRequest req) {
         User user = currentUser(email);
@@ -50,18 +57,14 @@ public class CommandeService {
 
         Commande commande = new Commande();
         commande.setClient(user);
-        commande.setNomClient(
-            req.getNom() != null && !req.getNom().isBlank() ? req.getNom() : user.getNom()
-        );
-        commande.setPrenomClient(
-            req.getPrenom() != null && !req.getPrenom().isBlank() ? req.getPrenom() : user.getPrenom()
-        );
+        commande.setNomClient(req.getNom() != null && !req.getNom().isBlank() ? req.getNom() : user.getNom());
+        commande.setPrenomClient(req.getPrenom() != null && !req.getPrenom().isBlank() ? req.getPrenom() : user.getPrenom());
         commande.setEmailClient(user.getEmail());
         commande.setTelephone(req.getTelephone());
         commande.setAdresse(req.getAdresse());
         commande.setVille(req.getVille());
         commande.setCodePostal(req.getCodePostal());
-        commande.setModePaiement(req.getModePaiement());
+        commande.setModePaiement(parseModePaiement(req.getModePaiement()));
         commande.setCardLast4(req.getCardLast4());
         commande.setNote(req.getNote());
         commande.setStatutCommande(StatutCommande.EN_ATTENTE);
@@ -120,4 +123,5 @@ public class CommandeService {
         commande.setArchived(true);
         return CommandeResponse.from(commandeRepository.save(commande));
     }
+    
 }

@@ -13,7 +13,7 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
 
   @EntityGraph(attributePaths = "categorie")
   List<Article> findAllByOrderByIdDesc();
-
+  List<Article> findByCategorieIdAndActifTrue(Long categorieId);
   @EntityGraph(attributePaths = "categorie")
   List<Article> findByActifTrueOrderByIdDesc();
 
