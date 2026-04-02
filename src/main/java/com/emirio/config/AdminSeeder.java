@@ -24,7 +24,7 @@ public class AdminSeeder {
         .prenom("Emirio")
         .email(email)
         .mdp(encoder.encode("admin123"))   // change later
-        .role(Role.ADMIN)
+        .role(Role.ADMIN_GENERAL)
         .dateDeCreation(Instant.now())
         .statutCompte("ACTIVE")
         .build();

@@ -49,7 +49,7 @@ public class User {
             statutCompte = "ACTIVE";
         }
         if (role == null) {
-            role = Role.CLIENT;
+            role = Role.USER;
         }
     }
 }
