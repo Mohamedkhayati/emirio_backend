@@ -103,9 +103,11 @@ public class PublicArticleController {
     }
 
     return ResponseEntity.ok()
-      .contentType(mediaType)
-      .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
-      .body(data);
+    		  .contentType(mediaType)
+    		  .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0")
+    		  .header(HttpHeaders.PRAGMA, "no-cache")
+    		  .header(HttpHeaders.EXPIRES, "0")
+    		  .body(data);
   }
 
   @GetMapping("/{id}/image/{index}")
@@ -265,21 +267,10 @@ public class PublicArticleController {
       d.variations = vars.stream().map(VariationDto::from).toList();
       d.colors = colorDtos(vars);
 
-      VariationArticle firstWithImages = vars.stream().filter(v ->
-        v.getImageData1() != null || v.getImageData2() != null || v.getImageData3() != null || v.getImageData4() != null
-      ).findFirst().orElse(null);
-
-      if (firstWithImages != null) {
-        d.imageUrl = variationImageUrl(firstWithImages, 1);
-        d.imageUrl2 = variationImageUrl(firstWithImages, 2);
-        d.imageUrl3 = variationImageUrl(firstWithImages, 3);
-        d.imageUrl4 = variationImageUrl(firstWithImages, 4);
-      } else {
-        d.imageUrl = articleImageUrl(a, 1);
-        d.imageUrl2 = articleImageUrl(a, 2);
-        d.imageUrl3 = articleImageUrl(a, 3);
-        d.imageUrl4 = articleImageUrl(a, 4);
-      }
+      d.imageUrl = articleImageUrl(a, 1);
+      d.imageUrl2 = articleImageUrl(a, 2);
+      d.imageUrl3 = articleImageUrl(a, 3);
+      d.imageUrl4 = articleImageUrl(a, 4);
 
       return d;
     }
@@ -329,21 +320,10 @@ public class PublicArticleController {
       d.variations = vars.stream().map(VariationDto::from).toList();
       d.colors = colorDtos(vars);
 
-      VariationArticle firstWithImages = vars.stream().filter(v ->
-        v.getImageData1() != null || v.getImageData2() != null || v.getImageData3() != null || v.getImageData4() != null
-      ).findFirst().orElse(null);
-
-      if (firstWithImages != null) {
-        d.imageUrl = variationImageUrl(firstWithImages, 1);
-        d.imageUrl2 = variationImageUrl(firstWithImages, 2);
-        d.imageUrl3 = variationImageUrl(firstWithImages, 3);
-        d.imageUrl4 = variationImageUrl(firstWithImages, 4);
-      } else {
-        d.imageUrl = articleImageUrl(a, 1);
-        d.imageUrl2 = articleImageUrl(a, 2);
-        d.imageUrl3 = articleImageUrl(a, 3);
-        d.imageUrl4 = articleImageUrl(a, 4);
-      }
+      d.imageUrl = articleImageUrl(a, 1);
+      d.imageUrl2 = articleImageUrl(a, 2);
+      d.imageUrl3 = articleImageUrl(a, 3);
+      d.imageUrl4 = articleImageUrl(a, 4);
 
       return d;
     }
