@@ -9,16 +9,19 @@ import java.util.Optional;
 
 public interface VariationRepository extends JpaRepository<VariationArticle, Long> {
 
-  @EntityGraph(attributePaths = {"article", "couleur", "taille"})
-  List<VariationArticle> findByArticleIdOrderByIdAsc(Long articleId);
+    @EntityGraph(attributePaths = {"article", "couleur", "taille"})
+    List<VariationArticle> findByArticleIdOrderByIdAsc(Long articleId);
 
-  @EntityGraph(attributePaths = {"article", "couleur", "taille"})
-  List<VariationArticle> findByArticleId(Long articleId);
+    @EntityGraph(attributePaths = {"article", "couleur", "taille"})
+    List<VariationArticle> findByArticleId(Long articleId);
 
-  @EntityGraph(attributePaths = {"article", "couleur", "taille"})
-  Optional<VariationArticle> findFirstByArticleIdAndCouleurIdOrderByIdAsc(Long articleId, Long couleurId);
+    @EntityGraph(attributePaths = {"article", "couleur", "taille"})
+    Optional<VariationArticle> findFirstByArticleIdAndCouleurIdOrderByIdAsc(Long articleId, Long couleurId);
 
-  boolean existsByArticleIdAndCouleurIdAndTailleId(Long articleId, Long couleurId, Long tailleId);
+    @EntityGraph(attributePaths = {"article", "couleur", "taille"})
+    Optional<VariationArticle> findById(Long id);
 
-  boolean existsByArticleIdAndCouleurIdAndTailleIdAndIdNot(Long articleId, Long couleurId, Long tailleId, Long id);
+    boolean existsByArticleIdAndCouleurIdAndTailleId(Long articleId, Long couleurId, Long tailleId);
+
+    boolean existsByArticleIdAndCouleurIdAndTailleIdAndIdNot(Long articleId, Long couleurId, Long tailleId, Long id);
 }

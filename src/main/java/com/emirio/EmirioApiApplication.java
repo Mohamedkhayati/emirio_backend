@@ -8,4 +8,5 @@ public class EmirioApiApplication {
   public static void main(String[] args) {
     SpringApplication.run(EmirioApiApplication.class, args);
   }
+  
 }

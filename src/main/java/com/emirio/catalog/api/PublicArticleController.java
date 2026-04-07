@@ -103,11 +103,37 @@ public class PublicArticleController {
     }
 
     return ResponseEntity.ok()
-    		  .contentType(mediaType)
-    		  .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0")
-    		  .header(HttpHeaders.PRAGMA, "no-cache")
-    		  .header(HttpHeaders.EXPIRES, "0")
-    		  .body(data);
+      .contentType(mediaType)
+      .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0")
+      .header(HttpHeaders.PRAGMA, "no-cache")
+      .header(HttpHeaders.EXPIRES, "0")
+      .body(data);
+  }
+
+  @GetMapping("/variation-model/{variationId}")
+  public ResponseEntity<byte[]> variationModel(@PathVariable Long variationId) {
+    VariationArticle v = variations.findById(variationId)
+      .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Variation not found"));
+
+    byte[] data = v.getModel3dData();
+    String type = v.getModel3dType();
+
+    if (data == null || data.length == 0) {
+      return ResponseEntity.notFound().build();
+    }
+
+    MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+    try {
+      if (type != null && !type.isBlank()) mediaType = MediaType.parseMediaType(type);
+    } catch (Exception ignored) {
+    }
+
+    return ResponseEntity.ok()
+      .contentType(mediaType)
+      .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0")
+      .header(HttpHeaders.PRAGMA, "no-cache")
+      .header(HttpHeaders.EXPIRES, "0")
+      .body(data);
   }
 
   @GetMapping("/{id}/image/{index}")
@@ -192,6 +218,11 @@ public class PublicArticleController {
       default -> null;
     };
     return data != null && data.length > 0 ? "/api/articles/variation-image/" + v.getId() + "/" + index : null;
+  }
+
+  private static String variationModelUrl(VariationArticle v) {
+    byte[] data = v.getModel3dData();
+    return data != null && data.length > 0 ? "/api/articles/variation-model/" + v.getId() : null;
   }
 
   @Data
@@ -343,6 +374,7 @@ public class PublicArticleController {
     private String imageUrl2;
     private String imageUrl3;
     private String imageUrl4;
+    private String model3dUrl;
 
     static VariationDto from(VariationArticle v) {
       VariationDto d = new VariationDto();
@@ -358,6 +390,7 @@ public class PublicArticleController {
       d.imageUrl2 = variationImageUrl(v, 2);
       d.imageUrl3 = variationImageUrl(v, 3);
       d.imageUrl4 = variationImageUrl(v, 4);
+      d.model3dUrl = variationModelUrl(v);
       return d;
     }
   }
@@ -370,6 +403,7 @@ public class PublicArticleController {
     private int totalStock;
     private List<String> sizes;
     private String previewImage;
+    private String previewModel3dUrl;
 
     static ColorDto from(List<VariationArticle> sameColor) {
       VariationArticle first = sameColor.get(0);
@@ -380,6 +414,7 @@ public class PublicArticleController {
       d.totalStock = sameColor.stream().mapToInt(VariationArticle::getQuantiteStock).sum();
       d.sizes = sameColor.stream().map(v -> v.getTaille().getPointure()).distinct().toList();
       d.previewImage = variationImageUrl(first, 1);
+      d.previewModel3dUrl = variationModelUrl(first);
       return d;
     }
   }

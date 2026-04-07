@@ -35,7 +35,7 @@ public class VariationArticle {
 
     @Lob
     @Basic(fetch = FetchType.LAZY)
-    @Column(name = "image_data_1", columnDefinition = "LONGBLOB")
+    @Column(name = "image_data_1", columnDefinition = "MEDIUMBLOB")
     private byte[] imageData1;
 
     @Column(name = "image_name_1")
@@ -46,7 +46,7 @@ public class VariationArticle {
 
     @Lob
     @Basic(fetch = FetchType.LAZY)
-    @Column(name = "image_data_2", columnDefinition = "LONGBLOB")
+    @Column(name = "image_data_2", columnDefinition = "MEDIUMBLOB")
     private byte[] imageData2;
 
     @Column(name = "image_name_2")
@@ -57,7 +57,7 @@ public class VariationArticle {
 
     @Lob
     @Basic(fetch = FetchType.LAZY)
-    @Column(name = "image_data_3", columnDefinition = "LONGBLOB")
+    @Column(name = "image_data_3", columnDefinition = "MEDIUMBLOB")
     private byte[] imageData3;
 
     @Column(name = "image_name_3")
@@ -68,7 +68,7 @@ public class VariationArticle {
 
     @Lob
     @Basic(fetch = FetchType.LAZY)
-    @Column(name = "image_data_4", columnDefinition = "LONGBLOB")
+    @Column(name = "image_data_4", columnDefinition = "MEDIUMBLOB")
     private byte[] imageData4;
 
     @Column(name = "image_name_4")
@@ -76,6 +76,17 @@ public class VariationArticle {
 
     @Column(name = "image_type_4")
     private String imageType4;
+
+    @Lob
+    @Basic(fetch = FetchType.LAZY)
+    @Column(name = "model_3d_data", columnDefinition = "LONGBLOB")
+    private byte[] model3dData;
+
+    @Column(name = "model_3d_name")
+    private String model3dName;
+
+    @Column(name = "model_3d_type")
+    private String model3dType;
 
     public Long getId() {
         return id;
@@ -216,4 +227,27 @@ public class VariationArticle {
     public void setImageType4(String imageType4) {
         this.imageType4 = imageType4;
     }
-}
+
+    public byte[] getModel3dData() {
+        return model3dData;
+    }
+
+    public void setModel3dData(byte[] model3dData) {
+        this.model3dData = model3dData;
+    }
+
+    public String getModel3dName() {
+        return model3dName;
+    }
+
+    public void setModel3dName(String model3dName) {
+        this.model3dName = model3dName;
+    }
+
+    public String getModel3dType() {
+        return model3dType;
+    }
+
+    public void setModel3dType(String model3dType) {
+        this.model3dType = model3dType;
+    }}

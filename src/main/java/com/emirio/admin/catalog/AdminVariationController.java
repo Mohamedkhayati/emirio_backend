@@ -8,6 +8,8 @@ import com.emirio.catalog.repo.ArticleRepository;
 import com.emirio.catalog.repo.ColorRepository;
 import com.emirio.catalog.repo.SizeRepository;
 import com.emirio.catalog.repo.VariationRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -33,17 +35,20 @@ public class AdminVariationController {
   private final ArticleRepository articles;
   private final ColorRepository colors;
   private final SizeRepository sizes;
+  private final ObjectMapper objectMapper;
 
   public AdminVariationController(
     VariationRepository variations,
     ArticleRepository articles,
     ColorRepository colors,
-    SizeRepository sizes
+    SizeRepository sizes,
+    ObjectMapper objectMapper
   ) {
     this.variations = variations;
     this.articles = articles;
     this.colors = colors;
     this.sizes = sizes;
+    this.objectMapper = objectMapper;
   }
 
   @GetMapping("/articles/{articleId}/variations")
@@ -59,7 +64,8 @@ public class AdminVariationController {
     @RequestPart(value = "image1", required = false) MultipartFile image1,
     @RequestPart(value = "image2", required = false) MultipartFile image2,
     @RequestPart(value = "image3", required = false) MultipartFile image3,
-    @RequestPart(value = "image4", required = false) MultipartFile image4
+    @RequestPart(value = "image4", required = false) MultipartFile image4,
+    @RequestPart(value = "model3d", required = false) MultipartFile model3d
   ) throws IOException {
     Article article = findArticle(articleId);
     Color color = findColor(req.getCouleurId());
@@ -75,41 +81,48 @@ public class AdminVariationController {
     v.setTaille(size);
     v.setPrix(req.getPrix());
     v.setQuantiteStock(req.getQuantiteStock());
+
     applyImages(v, image1, image2, image3, image4);
+    applyModel3d(v, model3d);
 
     return VariationDto.from(variations.save(v));
   }
 
+  
   @PutMapping(value = "/variations/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public VariationDto update(
-    @PathVariable Long id,
-    @RequestPart("data") @Valid CreateReq req,
-    @RequestPart(value = "image1", required = false) MultipartFile image1,
-    @RequestPart(value = "image2", required = false) MultipartFile image2,
-    @RequestPart(value = "image3", required = false) MultipartFile image3,
-    @RequestPart(value = "image4", required = false) MultipartFile image4
+      @PathVariable Long id,
+      @RequestPart("data") @Valid CreateReq req,
+      @RequestPart(value = "image1", required = false) MultipartFile image1,
+      @RequestPart(value = "image2", required = false) MultipartFile image2,
+      @RequestPart(value = "image3", required = false) MultipartFile image3,
+      @RequestPart(value = "image4", required = false) MultipartFile image4,
+      @RequestPart(value = "model3d", required = false) MultipartFile model3d
   ) throws IOException {
-    VariationArticle v = findVariation(id);
-    Color color = findColor(req.getCouleurId());
-    Size size = findSize(req.getTailleId());
+      VariationArticle v = findVariation(id);
+      Color color = findColor(req.getCouleurId());
+      Size size = findSize(req.getTailleId());
 
-    if (variations.existsByArticleIdAndCouleurIdAndTailleIdAndIdNot(
-      v.getArticle().getId(),
-      req.getCouleurId(),
-      req.getTailleId(),
-      id
-    )) {
-      throw new ResponseStatusException(BAD_REQUEST, "This variation already exists for the selected article");
-    }
+      if (variations.existsByArticleIdAndCouleurIdAndTailleIdAndIdNot(
+          v.getArticle().getId(),
+          req.getCouleurId(),
+          req.getTailleId(),
+          id
+      )) {
+          throw new ResponseStatusException(BAD_REQUEST, "This variation already exists for the selected article");
+      }
 
-    v.setCouleur(color);
-    v.setTaille(size);
-    v.setPrix(req.getPrix());
-    v.setQuantiteStock(req.getQuantiteStock());
-    applyImages(v, image1, image2, image3, image4);
+      v.setCouleur(color);
+      v.setTaille(size);
+      v.setPrix(req.getPrix());
+      v.setQuantiteStock(req.getQuantiteStock());
 
-    return VariationDto.from(variations.save(v));
+      applyImages(v, image1, image2, image3, image4);
+      applyModel3d(v, model3d);
+
+      return VariationDto.from(variations.save(v));
   }
+  
 
   @DeleteMapping("/variations/{id}")
   public void delete(@PathVariable Long id) {
@@ -127,6 +140,14 @@ public class AdminVariationController {
       case 4 -> imageOr404(v.getImageData4());
       default -> throw new ResponseStatusException(NOT_FOUND, "Image not found");
     };
+  }
+
+  private CreateReq readReq(String dataJson) {
+    try {
+      return objectMapper.readValue(dataJson, CreateReq.class);
+    } catch (Exception e) {
+      throw new ResponseStatusException(BAD_REQUEST, "Invalid variation data");
+    }
   }
 
   private byte[] imageOr404(byte[] data) {
@@ -171,6 +192,27 @@ public class AdminVariationController {
     }
   }
 
+  private void applyModel3d(VariationArticle v, MultipartFile model3d) throws IOException {
+    if (model3d == null || model3d.isEmpty()) return;
+
+    v.setModel3dData(model3d.getBytes());
+    v.setModel3dName(model3d.getOriginalFilename());
+
+    String contentType = model3d.getContentType();
+    if (contentType == null || contentType.isBlank()) {
+      String name = model3d.getOriginalFilename() == null ? "" : model3d.getOriginalFilename().toLowerCase();
+      if (name.endsWith(".glb")) {
+        contentType = "model/gltf-binary";
+      } else if (name.endsWith(".gltf")) {
+        contentType = "model/gltf+json";
+      } else {
+        contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+      }
+    }
+
+    v.setModel3dType(contentType);
+  }
+
   private void ensureArticleExists(Long articleId) {
     if (!articles.existsById(articleId)) {
       throw new ResponseStatusException(NOT_FOUND, "Article not found");
@@ -208,6 +250,11 @@ public class AdminVariationController {
     return data != null && data.length > 0 ? "/api/admin/variations/" + v.getId() + "/image/" + index : null;
   }
 
+  private static String model3dUrl(VariationArticle v) {
+    byte[] data = v.getModel3dData();
+    return data != null && data.length > 0 ? "/api/articles/variation-model/" + v.getId() : null;
+  }
+
   @Data
   public static class CreateReq {
     @Positive
@@ -238,6 +285,7 @@ public class AdminVariationController {
     private String imageUrl2;
     private String imageUrl3;
     private String imageUrl4;
+    private String model3dUrl;
 
     static VariationDto from(VariationArticle v) {
       VariationDto d = new VariationDto();
@@ -254,6 +302,7 @@ public class AdminVariationController {
       d.imageUrl2 = imageUrl(v, 2);
       d.imageUrl3 = imageUrl(v, 3);
       d.imageUrl4 = imageUrl(v, 4);
+      d.model3dUrl = model3dUrl(v);
       return d;
     }
   }

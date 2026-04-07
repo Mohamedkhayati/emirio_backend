@@ -79,16 +79,22 @@ public class SecurityConfig {
                     "/favicon.ico"
                 ).permitAll()
 
-                .requestMatchers(HttpMethod.GET, "/api/categories/**", "/api/articles/**").permitAll()
+                // PUBLIC MEDIA GET ENDPOINTS — keep these before /api/admin/**
+                .requestMatchers(HttpMethod.GET,
+                    "/api/admin/variations/*/image/*",
+                    "/api/articles/**" // <-- This is now fully public
+                ).permitAll()
+
+                .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
 
                 // VENDEUR + ADMIN_GENERAL
                 .requestMatchers(
-                	    "/api/admin/articles/**",
-                	    "/api/admin/categories/**",
-                	    "/api/admin/colors/**",
-                	    "/api/admin/sizes/**",
-                	    "/api/admin/variations/**"
-                	).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
+                    "/api/admin/articles/**",
+                    "/api/admin/categories/**",
+                    "/api/admin/colors/**",
+                    "/api/admin/sizes/**",
+                    "/api/admin/variations/**"
+                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
 
                 // ADMIN_GENERAL only
                 .requestMatchers(
