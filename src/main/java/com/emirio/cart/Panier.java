@@ -35,6 +35,7 @@ public class Panier {
     private User client;
 
     @OneToMany(mappedBy = "panier", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id ASC")
     private List<LignePanier> lignes = new ArrayList<>();
 
     @PrePersist
@@ -48,12 +49,25 @@ public class Panier {
         dateMaj = LocalDateTime.now();
     }
 
+    public void touch() {
+        this.dateMaj = LocalDateTime.now();
+    }
+
     public void addLigne(LignePanier ligne) {
+        if (ligne == null) return;
         ligne.setPanier(this);
         this.lignes.add(ligne);
     }
 
+    public void clearLignes() {
+        this.lignes.clear();
+    }
+
     public double getTotalPanier() {
         return lignes.stream().mapToDouble(LignePanier::getSousTotal).sum();
+    }
+
+    public int getTotalItems() {
+        return lignes.stream().mapToInt(LignePanier::getQuantite).sum();
     }
 }

@@ -3,25 +3,40 @@ package com.emirio.catalog.repo;
 import com.emirio.catalog.VariationArticle;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface VariationRepository extends JpaRepository<VariationArticle, Long> {
 
-    @EntityGraph(attributePaths = {"article", "couleur", "taille"})
+    @EntityGraph(attributePaths = {"article", "couleur", "taille", "images"})
     List<VariationArticle> findByArticleIdOrderByIdAsc(Long articleId);
 
-    @EntityGraph(attributePaths = {"article", "couleur", "taille"})
+    @EntityGraph(attributePaths = {"article", "couleur", "taille", "images"})
     List<VariationArticle> findByArticleId(Long articleId);
 
-    @EntityGraph(attributePaths = {"article", "couleur", "taille"})
+    @EntityGraph(attributePaths = {"article", "couleur", "taille", "images"})
     Optional<VariationArticle> findFirstByArticleIdAndCouleurIdOrderByIdAsc(Long articleId, Long couleurId);
 
-    @EntityGraph(attributePaths = {"article", "couleur", "taille"})
-    Optional<VariationArticle> findById(Long id);
+    @EntityGraph(attributePaths = {"article", "couleur", "taille", "images"})
+    @Query("select v from VariationArticle v where v.article.id = :articleId order by v.id asc")
+    List<VariationArticle> findForApiByArticleId(@Param("articleId") Long articleId);
+
+    @EntityGraph(attributePaths = {"article", "couleur", "taille", "images"})
+    @Query("select v from VariationArticle v where v.id = :id")
+    Optional<VariationArticle> findForApiById(@Param("id") Long id);
+
+    @EntityGraph(attributePaths = {"article", "article.vendeur", "couleur", "taille", "images"})
+    @Query("select v from VariationArticle v where v.id = :id")
+    Optional<VariationArticle> findWithArticleAndVendeurById(@Param("id") Long id);
 
     boolean existsByArticleIdAndCouleurIdAndTailleId(Long articleId, Long couleurId, Long tailleId);
 
     boolean existsByArticleIdAndCouleurIdAndTailleIdAndIdNot(Long articleId, Long couleurId, Long tailleId, Long id);
+
+    boolean existsByArticleIdAndCouleurIdAndTailleIsNull(Long articleId, Long couleurId);
+
+    boolean existsByArticleIdAndCouleurIdAndTailleIsNullAndIdNot(Long articleId, Long couleurId, Long id);
 }

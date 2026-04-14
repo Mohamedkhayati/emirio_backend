@@ -32,6 +32,10 @@ public class Commande {
     @Column(nullable = false, length = 30)
     private StatutCommande statutCommande;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private StatutPaiement statutPaiement = StatutPaiement.EN_ATTENTE_VERIFICATION;
+
     @Column(nullable = false)
     private double total;
 
@@ -56,8 +60,8 @@ public class Commande {
     private String codePostal;
 
     @Enumerated(EnumType.STRING)
+    @Column(length = 30)
     private ModePaiement modePaiement;
-
 
     @Column(length = 1000)
     private String note;
@@ -71,24 +75,6 @@ public class Commande {
 
     @OneToMany(mappedBy = "commande", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<LigneCommande> lignes = new ArrayList<>();
-
-    @PrePersist
-    void onCreate() {
-        if (dateCommande == null) dateCommande = LocalDateTime.now();
-        if (statutCommande == null) statutCommande = StatutCommande.EN_ATTENTE;
-        if (referenceCommande == null || referenceCommande.isBlank()) {
-            referenceCommande = "CMD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        }
-    }
-
-    public void addLigne(LigneCommande ligne) {
-        ligne.setCommande(this);
-        this.lignes.add(ligne);
-    }
-   
-
-    @Enumerated(EnumType.STRING)
-    private StatutPaiement statutPaiement = StatutPaiement.EN_ATTENTE_VERIFICATION;
 
     private String cardLast4;
     private String d17Phone;
@@ -108,4 +94,32 @@ public class Commande {
 
     @Column(length = 1000)
     private String adminDecisionNote;
+
+    @PrePersist
+    void onCreate() {
+        if (dateCommande == null) {
+            dateCommande = LocalDateTime.now();
+        }
+        if (statutCommande == null) {
+            statutCommande = StatutCommande.EN_ATTENTE;
+        }
+        if (statutPaiement == null) {
+            statutPaiement = StatutPaiement.EN_ATTENTE_VERIFICATION;
+        }
+        if (referenceCommande == null || referenceCommande.isBlank()) {
+            referenceCommande = "CMD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        }
+    }
+
+    public void addLigne(LigneCommande ligne) {
+        ligne.setCommande(this);
+        this.lignes.add(ligne);
+    }
+
+    public void clearLignes() {
+        for (LigneCommande ligne : lignes) {
+            ligne.setCommande(null);
+        }
+        lignes.clear();
+    }
 }

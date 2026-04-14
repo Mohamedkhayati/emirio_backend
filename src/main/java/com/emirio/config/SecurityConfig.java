@@ -2,18 +2,19 @@ package com.emirio.config;
 
 import com.emirio.security.JwtAuthFilter;
 import com.emirio.security.OAuth2LoginSuccessHandler;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -24,6 +25,7 @@ import java.util.List;
 import static org.springframework.security.config.Customizer.withDefaults;
 
 @Configuration
+@EnableWebSecurity(debug = true)
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
@@ -67,7 +69,14 @@ public class SecurityConfig {
             .httpBasic(basic -> basic.disable())
             .requestCache(cache -> cache.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
-            .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint((request, response, authException) -> {
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
+                })
+                .accessDeniedHandler((request, response, accessDeniedException) -> {
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden");
+                })
+            )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
@@ -79,16 +88,22 @@ public class SecurityConfig {
                     "/favicon.ico"
                 ).permitAll()
 
-                // PUBLIC MEDIA GET ENDPOINTS — keep these before /api/admin/**
                 .requestMatchers(HttpMethod.GET,
-                    "/api/admin/variations/*/image/*",
-                    "/api/articles/**" // <-- This is now fully public
+                    "/api/articles/**",
+                    "/api/categories/**",
+                    "/api/colors/**",
+                    "/api/sizes/**"
                 ).permitAll()
 
-                .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
+                .requestMatchers(HttpMethod.GET,
+                    "/api/admin/articles/**",
+                    "/api/admin/categories/**",
+                    "/api/admin/colors/**",
+                    "/api/admin/sizes/**",
+                    "/api/admin/variations/**"
+                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR", "USER")
 
-                // VENDEUR + ADMIN_GENERAL
-                .requestMatchers(
+                .requestMatchers(HttpMethod.POST,
                     "/api/admin/articles/**",
                     "/api/admin/categories/**",
                     "/api/admin/colors/**",
@@ -96,15 +111,36 @@ public class SecurityConfig {
                     "/api/admin/variations/**"
                 ).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
 
-                // ADMIN_GENERAL only
+                .requestMatchers(HttpMethod.PUT,
+                    "/api/admin/articles/**",
+                    "/api/admin/categories/**",
+                    "/api/admin/colors/**",
+                    "/api/admin/sizes/**",
+                    "/api/admin/variations/**"
+                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
+
+                .requestMatchers(HttpMethod.PATCH,
+                    "/api/admin/articles/**",
+                    "/api/admin/categories/**",
+                    "/api/admin/colors/**",
+                    "/api/admin/sizes/**",
+                    "/api/admin/variations/**"
+                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
+
+                .requestMatchers(HttpMethod.DELETE,
+                    "/api/admin/articles/**",
+                    "/api/admin/categories/**",
+                    "/api/admin/colors/**",
+                    "/api/admin/sizes/**",
+                    "/api/admin/variations/**"
+                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
+
                 .requestMatchers(
                     "/api/admin/users/**",
                     "/api/admin/clients/**",
                     "/api/admin/orders/**",
                     "/api/admin/dashboard/**"
                 ).hasRole("ADMIN_GENERAL")
-
-                .requestMatchers("/api/admin/**").hasRole("ADMIN_GENERAL")
 
                 .anyRequest().authenticated()
             )

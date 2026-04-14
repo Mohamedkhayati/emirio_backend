@@ -8,11 +8,14 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.emirio.common.audit.AuditedEntity;
+import com.emirio.user.User;
+
 @Entity
 @Getter
 @Setter
 @Table(name = "article")
-public class Article {
+public class Article extends AuditedEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -103,4 +106,14 @@ public class Article {
   private Category categorie;
   @OneToMany(mappedBy = "article", cascade = CascadeType.ALL, orphanRemoval = true)
   private List<ArticleReview> reviews = new ArrayList<>();
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "vendeur_id")
+  private User vendeur;
+  public User getVendeur() {
+	    return vendeur;
+	}
+
+	public void setVendeur(User vendeur) {
+	    this.vendeur = vendeur;
+	}
 }

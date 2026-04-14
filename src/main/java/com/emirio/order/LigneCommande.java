@@ -45,7 +45,9 @@ public class LigneCommande {
     @PrePersist
     @PreUpdate
     void calculeSousTotal() {
-        if (quantite < 1) quantite = 1;
+        if (quantite < 1) {
+            quantite = 1;
+        }
         sousTotal = prixUnitaire * quantite;
     }
 }
