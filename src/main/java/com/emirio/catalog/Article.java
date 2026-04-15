@@ -1,119 +1,144 @@
 package com.emirio.catalog;
 
+import com.emirio.user.User;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-
-import com.emirio.common.audit.AuditedEntity;
-import com.emirio.user.User;
 
 @Entity
+@Table(name = "article")
+@EntityListeners(AuditingEntityListener.class)
 @Getter
 @Setter
-@Table(name = "article")
-public class Article extends AuditedEntity {
+public class Article {
 
-  @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-  @Column(nullable = false, length = 180)
-  private String nom;
+    @Version
+    private Long version;
 
-  @Column(length = 2000)
-  private String description;
+    @Column(nullable = false, length = 180)
+    private String nom;
 
-  @Column(length = 6000)
-  private String details;
+    @Column(length = 2000)
+    private String description;
 
-  @Column(nullable = false)
-  private double prix;
+    @Column(length = 6000)
+    private String details;
 
-  @Column(nullable = false)
-  private boolean actif = true;
+    @Column(nullable = false)
+    private double prix;
 
-  @Column(length = 160)
-  private String marque;
+    @Column(nullable = false)
+    private boolean actif = true;
 
-  @Column(length = 160)
-  private String matiere;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "categorie_id", nullable = false)
+    private Category categorie;
 
-  @Column(length = 120, unique = true)
-  private String sku;
+    @Column(length = 160)
+    private String marque;
 
-  @Column(name = "sale_price")
-  private Double salePrice;
+    @Column(length = 160)
+    private String matiere;
 
-  @Column(name = "sale_start_at")
-  private LocalDateTime saleStartAt;
+    @Column(length = 120, unique = true)
+    private String sku;
 
-  @Column(name = "sale_end_at")
-  private LocalDateTime saleEndAt;
+    @Lob
+    @Column(name = "image_data1")
+    private byte[] imageData1;
 
-  @Column(name = "recommended")
-  private boolean recommended = false;
+    @Column(name = "image_name1")
+    private String imageName1;
 
-  @Lob
-  @Basic(fetch = FetchType.LAZY)
-  @Column(name = "image_data1", columnDefinition = "LONGBLOB")
-  private byte[] imageData1;
+    @Column(name = "image_type1")
+    private String imageType1;
 
-  @Column(name = "image_name1")
-  private String imageName1;
+    @Lob
+    @Column(name = "image_data2")
+    private byte[] imageData2;
 
-  @Column(name = "image_type1")
-  private String imageType1;
+    @Column(name = "image_name2")
+    private String imageName2;
 
-  @Lob
-  @Basic(fetch = FetchType.LAZY)
-  @Column(name = "image_data2", columnDefinition = "LONGBLOB")
-  private byte[] imageData2;
+    @Column(name = "image_type2")
+    private String imageType2;
 
-  @Column(name = "image_name2")
-  private String imageName2;
+    @Lob
+    @Column(name = "image_data3")
+    private byte[] imageData3;
 
-  @Column(name = "image_type2")
-  private String imageType2;
+    @Column(name = "image_name3")
+    private String imageName3;
 
-  @Lob
-  @Basic(fetch = FetchType.LAZY)
-  @Column(name = "image_data3", columnDefinition = "LONGBLOB")
-  private byte[] imageData3;
+    @Column(name = "image_type3")
+    private String imageType3;
 
-  @Column(name = "image_name3")
-  private String imageName3;
+    @Lob
+    @Column(name = "image_data4")
+    private byte[] imageData4;
 
-  @Column(name = "image_type3")
-  private String imageType3;
+    @Column(name = "image_name4")
+    private String imageName4;
 
-  @Lob
-  @Basic(fetch = FetchType.LAZY)
-  @Column(name = "image_data4", columnDefinition = "LONGBLOB")
-  private byte[] imageData4;
+    @Column(name = "image_type4")
+    private String imageType4;
 
-  @Column(name = "image_name4")
-  private String imageName4;
+    @Column(name = "sale_price")
+    private Double salePrice;
 
-  @Column(name = "image_type4")
-  private String imageType4;
+    @Column(name = "sale_start_at")
+    private LocalDateTime saleStartAt;
 
-  @ManyToOne(fetch = FetchType.LAZY, optional = false)
-  @JoinColumn(name = "categorie_id")
-  private Category categorie;
-  @OneToMany(mappedBy = "article", cascade = CascadeType.ALL, orphanRemoval = true)
-  private List<ArticleReview> reviews = new ArrayList<>();
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "vendeur_id")
-  private User vendeur;
-  public User getVendeur() {
-	    return vendeur;
-	}
+    @Column(name = "sale_end_at")
+    private LocalDateTime saleEndAt;
 
-	public void setVendeur(User vendeur) {
-	    this.vendeur = vendeur;
-	}
+    @Column(nullable = false)
+    private boolean recommended = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vendeur_id")
+    private User vendeur;
+
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+
+    @CreatedBy
+    @Column(name = "created_by")
+    private String createdBy;
+
+    @LastModifiedBy
+    @Column(name = "last_modified_by")
+    private String lastModifiedBy;
+
+    @PrePersist
+    public void prePersist() {
+        LocalDateTime now = LocalDateTime.now();
+        if (createdAt == null) {
+            createdAt = now;
+        }
+        if (updatedAt == null) {
+            updatedAt = now;
+        }
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

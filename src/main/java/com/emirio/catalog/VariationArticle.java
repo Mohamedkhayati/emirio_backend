@@ -35,8 +35,8 @@ public class VariationArticle {
     @JoinColumn(name = "couleur_id", nullable = false)
     private Color couleur;
 
-    @ManyToOne(optional = true, fetch = FetchType.LAZY)
-    @JoinColumn(name = "taille_id", nullable = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "taille_id")
     private Size taille;
 
     @Column(name = "quantite_stock", nullable = false)
@@ -55,7 +55,7 @@ public class VariationArticle {
     @Column(name = "model_3d_type")
     private String model3dType;
 
-    @OneToMany(mappedBy = "variation", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "variation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<VariationImage> images = new ArrayList<>();
 
     @CreatedDate
@@ -73,6 +73,7 @@ public class VariationArticle {
     @LastModifiedBy
     @Column(name = "last_modified_by")
     private String lastModifiedBy;
+
     @Column(nullable = false)
     private boolean ruptureStockNotifEnvoyee = false;
 
@@ -90,12 +91,5 @@ public class VariationArticle {
     @PreUpdate
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
-    }
-    public boolean isRuptureStockNotifEnvoyee() {
-        return ruptureStockNotifEnvoyee;
-    }
-
-    public void setRuptureStockNotifEnvoyee(boolean ruptureStockNotifEnvoyee) {
-        this.ruptureStockNotifEnvoyee = ruptureStockNotifEnvoyee;
     }
 }

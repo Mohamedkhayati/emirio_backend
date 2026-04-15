@@ -10,11 +10,17 @@ import com.emirio.catalog.repo.ColorRepository;
 import com.emirio.catalog.repo.SizeRepository;
 import com.emirio.catalog.repo.VariationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.transaction.Transactional;
+
+// 🔴 THE IMPORTANT FIX: We use Spring's Transactional instead of jakarta
+import org.springframework.transaction.annotation.Transactional; 
+
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,12 +28,13 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @RestController
-@RequestMapping("/api/admin")
+@RequestMapping("/api")
 @CrossOrigin(origins = "http://localhost:5173", allowCredentials = "true")
 public class AdminVariationController {
 
@@ -51,17 +58,20 @@ public class AdminVariationController {
         this.objectMapper = objectMapper;
     }
 
-    @GetMapping("/articles/{articleId}/variations")
-    public List<VariationArticle> listByArticle(@PathVariable Long articleId) {
+    @GetMapping("/admin/articles/{articleId}/variations")
+    @Transactional(readOnly = true) 
+    public List<VariationDto> listByArticle(@PathVariable Long articleId) {
         Article article = articles.findById(articleId)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Article not found"));
 
-        return variations.findForApiByArticleId(article.getId());
+        return variations.findForApiByArticleId(article.getId()).stream()
+            .map(VariationDto::from)
+            .toList();
     }
 
-    @PostMapping(value = "/articles/{articleId}/variations", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/admin/articles/{articleId}/variations", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Transactional
-    public List<VariationArticle> createForArticle(
+    public List<VariationDto> createForArticle(
         @PathVariable Long articleId,
         @RequestPart("data") String data,
         @RequestPart(value = "images", required = false) List<MultipartFile> images,
@@ -92,7 +102,8 @@ public class AdminVariationController {
 
             attachFiles(v, images, model3d);
             saved.add(variations.save(v));
-            return saved;
+
+            return saved.stream().map(VariationDto::from).toList();
         }
 
         if (req.getSizes() == null || req.getSizes().isEmpty()) {
@@ -114,12 +125,12 @@ public class AdminVariationController {
             saved.add(variations.save(v));
         }
 
-        return saved;
+        return saved.stream().map(VariationDto::from).toList();
     }
 
-    @PutMapping(value = "/variations/{variationId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PutMapping(value = "/admin/variations/{variationId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Transactional
-    public VariationArticle updateVariation(
+    public VariationDto updateVariation(
         @PathVariable Long variationId,
         @RequestPart("data") String data,
         @RequestPart(value = "images", required = false) List<MultipartFile> images,
@@ -153,15 +164,73 @@ public class AdminVariationController {
         }
 
         attachFiles(v, images, model3d);
-        return variations.save(v);
+        VariationArticle saved = variations.save(v);
+
+        return VariationDto.from(saved);
     }
 
-    @DeleteMapping("/variations/{variationId}")
+    @DeleteMapping("/admin/variations/{variationId}")
     @Transactional
     public void deleteVariation(@PathVariable Long variationId) {
         VariationArticle v = variations.findById(variationId)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Variation not found"));
         variations.delete(v);
+    }
+
+    @GetMapping("/catalog/variations/{variationId}/images/{imageId}")
+    @Transactional(readOnly = true) 
+    public ResponseEntity<byte[]> getVariationImage(
+        @PathVariable Long variationId,
+        @PathVariable Long imageId
+    ) {
+        VariationArticle variation = variations.findById(variationId)
+            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Variation not found"));
+
+        VariationImage found = null;
+        if (variation.getImages() != null) {
+            for (VariationImage img : variation.getImages()) {
+                if (img.getId() != null && img.getId().equals(imageId)) {
+                    found = img;
+                    break;
+                }
+            }
+        }
+
+        if (found == null || found.getImageData() == null || found.getImageData().length == 0) {
+            throw new ResponseStatusException(NOT_FOUND, "Image not found");
+        }
+
+        MediaType mediaType = parseMediaType(found.getImageType(), MediaType.IMAGE_JPEG);
+
+        return ResponseEntity.ok()
+            .contentType(mediaType)
+            .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePublic())
+            .body(found.getImageData());
+    }
+
+    @GetMapping("/catalog/variations/{variationId}/model")
+    @Transactional(readOnly = true)
+    public ResponseEntity<byte[]> getVariationModel(@PathVariable Long variationId) {
+        VariationArticle variation = variations.findById(variationId)
+            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Variation not found"));
+
+        if (variation.getModel3dData() == null || variation.getModel3dData().length == 0) {
+            throw new ResponseStatusException(NOT_FOUND, "Model not found");
+        }
+
+        MediaType mediaType = parseMediaType(
+            variation.getModel3dType(),
+            MediaType.APPLICATION_OCTET_STREAM
+        );
+
+        return ResponseEntity.ok()
+            .contentType(mediaType)
+            .header(
+                HttpHeaders.CONTENT_DISPOSITION,
+                "inline; filename=\"" + safeFileName(variation.getModel3dName(), "model.glb") + "\""
+            )
+            .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePublic())
+            .body(variation.getModel3dData());
     }
 
     private void attachFiles(
@@ -199,6 +268,20 @@ public class AdminVariationController {
         return n.equals("accessoire") || n.equals("accessory") || n.equals("accessories");
     }
 
+    private MediaType parseMediaType(String raw, MediaType fallback) {
+        try {
+            if (raw == null || raw.isBlank()) return fallback;
+            return MediaType.parseMediaType(raw);
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
+
+    private String safeFileName(String raw, String fallback) {
+        if (raw == null || raw.isBlank()) return fallback;
+        return raw.replaceAll("[\\r\\n\\\\/\\t]", "_");
+    }
+
     @Data
     public static class VariationCreateReq {
         @NotNull
@@ -234,5 +317,62 @@ public class AdminVariationController {
         @NotNull
         @Min(0)
         private Integer quantiteStock;
+    }
+
+    @Data
+    public static class VariationDto {
+        private Long id;
+        private Long articleId;
+        private Long couleurId;
+        private String couleurNom;
+        private String couleurCodeHex;
+        private Long tailleId;
+        private String taillePointure;
+        private Double prix;
+        private Integer quantiteStock;
+        private String model3dName;
+        private String model3dType;
+        private String model3dUrl;
+        private List<String> imageUrls;
+
+        public static VariationDto from(VariationArticle v) {
+            VariationDto dto = new VariationDto();
+            dto.setId(v.getId());
+            dto.setArticleId(v.getArticle() != null ? v.getArticle().getId() : null);
+
+            if (v.getCouleur() != null) {
+                dto.setCouleurId(v.getCouleur().getId());
+                dto.setCouleurNom(v.getCouleur().getNom());
+                dto.setCouleurCodeHex(v.getCouleur().getCodeHex());
+            }
+
+            if (v.getTaille() != null) {
+                dto.setTailleId(v.getTaille().getId());
+                dto.setTaillePointure(v.getTaille().getPointure());
+            }
+
+            dto.setPrix(v.getPrix());
+            dto.setQuantiteStock(v.getQuantiteStock());
+            dto.setModel3dName(v.getModel3dName());
+            dto.setModel3dType(v.getModel3dType());
+
+            if (v.getModel3dData() != null && v.getModel3dData().length > 0) {
+                dto.setModel3dUrl("/api/catalog/variations/" + v.getId() + "/model");
+            } else {
+                dto.setModel3dUrl(null);
+            }
+
+            List<String> urls = new ArrayList<>();
+            if (v.getImages() != null && !v.getImages().isEmpty()) {
+                for (VariationImage img : v.getImages()) {
+                    if (img.getId() != null) {
+                        urls.add("/api/catalog/variations/" + v.getId() + "/images/" + img.getId());
+                    }
+                }
+            }
+            dto.setImageUrls(urls);
+
+            return dto;
+        }
     }
 }

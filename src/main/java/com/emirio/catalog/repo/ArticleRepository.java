@@ -11,43 +11,55 @@ import java.util.Optional;
 
 public interface ArticleRepository extends JpaRepository<Article, Long> {
 
-  @EntityGraph(attributePaths = "categorie")
-  List<Article> findAllByOrderByIdDesc();
-  List<Article> findByCategorieIdAndActifTrue(Long categorieId);
-  @EntityGraph(attributePaths = "categorie")
-  List<Article> findByActifTrueOrderByIdDesc();
+    @EntityGraph(attributePaths = "categorie")
+    List<Article> findAllByOrderByIdDesc();
 
-  @EntityGraph(attributePaths = "categorie")
-  List<Article> findByCategorieIdAndActifTrueOrderByIdDesc(Long categorieId);
+    List<Article> findByCategorieIdAndActifTrue(Long categorieId);
 
-  @Override
-  @EntityGraph(attributePaths = "categorie")
-  Optional<Article> findById(Long id);
+    @EntityGraph(attributePaths = "categorie")
+    List<Article> findByActifTrueOrderByIdDesc();
 
-  @EntityGraph(attributePaths = "categorie")
-  @Query("""
-      select a
-      from Article a
-      where a.categorie.id = :categoryId
-        and a.actif = true
-      order by a.id desc
-  """)
-  List<Article> findByCategorieId(Long categoryId);
+    @EntityGraph(attributePaths = "categorie")
+    List<Article> findByCategorieIdAndActifTrueOrderByIdDesc(Long categorieId);
 
-  @EntityGraph(attributePaths = "categorie")
-  @Query("""
-      select a
-      from Article a
-      where a.actif = true
-      order by a.id asc
-  """)
-  List<Article> findOldArticles();
+    @Override
+    @EntityGraph(attributePaths = "categorie")
+    Optional<Article> findById(Long id);
 
-  boolean existsBySkuIgnoreCase(String sku);
+    @EntityGraph(attributePaths = "categorie")
+    @Query("""
+        select a
+        from Article a
+        where a.categorie.id = :categoryId
+          and a.actif = true
+        order by a.id desc
+    """)
+    List<Article> findByCategorieId(Long categoryId);
 
-  boolean existsBySkuIgnoreCaseAndIdNot(String sku, Long id);
+    @EntityGraph(attributePaths = "categorie")
+    @Query("""
+        select a
+        from Article a
+        where a.actif = true
+        order by a.id asc
+    """)
+    List<Article> findOldArticles();
 
-  default List<Long> findBestSellerArticleIds() {
-    return Collections.emptyList();
-  }
+    @EntityGraph(attributePaths = "categorie")
+    @Query("""
+        select a
+        from Article a
+        where a.categorie.id = :categoryId
+          and a.actif = true
+        order by a.id desc
+    """)
+    List<Article> findActiveByCategorieId(Long categoryId);
+
+    boolean existsBySkuIgnoreCase(String sku);
+
+    boolean existsBySkuIgnoreCaseAndIdNot(String sku, Long id);
+
+    default List<Long> findBestSellerArticleIds() {
+        return Collections.emptyList();
+    }
 }
