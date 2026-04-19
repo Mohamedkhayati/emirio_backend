@@ -37,6 +37,9 @@ public class Panier {
     @OneToMany(mappedBy = "panier", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("id ASC")
     private List<LignePanier> lignes = new ArrayList<>();
+    @OneToMany(mappedBy = "panier", cascade = CascadeType.ALL, orphanRemoval = false)
+    @OrderBy("dateAction DESC")
+    private List<InteractionPanier> interactions = new ArrayList<>();
 
     @PrePersist
     void onCreate() {

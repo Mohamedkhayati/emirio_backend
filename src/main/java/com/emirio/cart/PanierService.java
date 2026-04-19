@@ -5,6 +5,7 @@ import com.emirio.catalog.repo.VariationRepository;
 import com.emirio.cart.dto.CartItemRequest;
 import com.emirio.cart.dto.PanierResponse;
 import com.emirio.cart.dto.PanierSyncRequest;
+import com.emirio.cart.repo.InteractionPanierRepository;
 import com.emirio.cart.repo.PanierRepository;
 import com.emirio.user.User;
 import com.emirio.user.UserRepository;
@@ -25,15 +26,18 @@ public class PanierService {
     private final PanierRepository panierRepository;
     private final UserRepository userRepository;
     private final VariationRepository variationRepository;
+    private final InteractionPanierRepository interactionPanierRepository;
 
     public PanierService(
         PanierRepository panierRepository,
         UserRepository userRepository,
-        VariationRepository variationRepository
+        VariationRepository variationRepository,
+        InteractionPanierRepository interactionPanierRepository
     ) {
         this.panierRepository = panierRepository;
         this.userRepository = userRepository;
         this.variationRepository = variationRepository;
+        this.interactionPanierRepository = interactionPanierRepository;
     }
 
     protected User currentUser(String email) {
@@ -45,6 +49,7 @@ public class PanierService {
             .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Unauthorized"));
     }
 
+    @Transactional
     protected Panier getOrCreatePanier(User user) {
         return panierRepository.findByClientId(user.getId())
             .orElseGet(() -> {
@@ -54,7 +59,7 @@ public class PanierService {
             });
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public PanierResponse getMyPanier(String email) {
         User user = currentUser(email);
         Panier panier = getOrCreatePanier(user);
@@ -104,10 +109,31 @@ public class PanierService {
             }
         }
 
+        for (Map.Entry<Long, LignePanier> entry : existingByVariationId.entrySet()) {
+            Long variationId = entry.getKey();
+            LignePanier existing = entry.getValue();
+
+            if (!requestedByVariationId.containsKey(variationId)) {
+                logInteraction(
+                    panier,
+                    user,
+                    TypeActionPanier.SUPPRESSION_ARTICLE,
+                    existing.getVariationId(),
+                    existing.getArticleId(),
+                    existing.getQuantite(),
+                    0,
+                    "Article supprimé du panier"
+                );
+            }
+        }
+
         panier.getLignes().removeIf(ligne -> !requestedByVariationId.containsKey(ligne.getVariationId()));
 
         for (CartItemRequest req : requestedByVariationId.values()) {
             LignePanier ligne = existingByVariationId.get(req.getVariationId());
+            boolean isNew = (ligne == null);
+            int oldQty = isNew ? 0 : ligne.getQuantite();
+            int newQty = Math.max(1, req.getQuantite());
 
             if (ligne == null) {
                 ligne = new LignePanier();
@@ -121,9 +147,44 @@ public class PanierService {
             ligne.setImageUrl(req.getImageUrl());
             ligne.setCouleurNom(req.getCouleurNom());
             ligne.setTaillePointure(req.getTaillePointure());
-            ligne.setQuantite(Math.max(1, req.getQuantite()));
+            ligne.setQuantite(newQty);
             ligne.setPrixUnitaire(req.getPrixUnitaire());
+
+            if (isNew) {
+                logInteraction(
+                    panier,
+                    user,
+                    TypeActionPanier.AJOUT_ARTICLE,
+                    req.getVariationId(),
+                    req.getArticleId(),
+                    0,
+                    newQty,
+                    "Article ajouté au panier"
+                );
+            } else if (oldQty != newQty) {
+                logInteraction(
+                    panier,
+                    user,
+                    TypeActionPanier.MODIFICATION_QUANTITE,
+                    req.getVariationId(),
+                    req.getArticleId(),
+                    oldQty,
+                    newQty,
+                    "Quantité modifiée"
+                );
+            }
         }
+
+        logInteraction(
+            panier,
+            user,
+            TypeActionPanier.SYNCHRONISATION_PANIER,
+            null,
+            null,
+            null,
+            null,
+            "Synchronisation complète du panier"
+        );
 
         panier.touch();
         Panier saved = panierRepository.saveAndFlush(panier);
@@ -137,11 +198,56 @@ public class PanierService {
 
         for (LignePanier ligne : panier.getLignes()) {
             increaseStock(ligne.getVariationId(), ligne.getQuantite());
+
+            logInteraction(
+                panier,
+                user,
+                TypeActionPanier.SUPPRESSION_ARTICLE,
+                ligne.getVariationId(),
+                ligne.getArticleId(),
+                ligne.getQuantite(),
+                0,
+                "Article supprimé lors du vidage panier"
+            );
         }
 
         panier.clearLignes();
+
+        logInteraction(
+            panier,
+            user,
+            TypeActionPanier.VIDAGE_PANIER,
+            null,
+            null,
+            null,
+            null,
+            "Panier vidé"
+        );
+
         panier.touch();
         panierRepository.saveAndFlush(panier);
+    }
+
+    private void logInteraction(
+        Panier panier,
+        User user,
+        TypeActionPanier typeAction,
+        Long variationId,
+        Long articleId,
+        Integer ancienneQuantite,
+        Integer nouvelleQuantite,
+        String details
+    ) {
+        InteractionPanier interaction = new InteractionPanier();
+        interaction.setPanier(panier);
+        interaction.setUtilisateur(user);
+        interaction.setTypeAction(typeAction);
+        interaction.setVariationId(variationId);
+        interaction.setArticleId(articleId);
+        interaction.setAncienneQuantite(ancienneQuantite);
+        interaction.setNouvelleQuantite(nouvelleQuantite);
+        interaction.setDetails(details);
+        interactionPanierRepository.save(interaction);
     }
 
     private Map<Long, CartItemRequest> mergeRequests(List<CartItemRequest> items) {

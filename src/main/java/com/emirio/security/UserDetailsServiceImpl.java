@@ -1,8 +1,11 @@
 package com.emirio.security;
 
 import com.emirio.user.UserRepository;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.*;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 public class UserDetailsServiceImpl implements UserDetailsService {
@@ -15,12 +18,15 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        var user = users.findByEmail(email)
+        var user = users.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        String roleName = user.getRole().getName();
+
         return org.springframework.security.core.userdetails.User
                 .withUsername(user.getEmail())
                 .password(user.getMdp())
-                .roles(user.getRole().name())
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_" + roleName)))
                 .build();
     }
 }

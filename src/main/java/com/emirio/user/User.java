@@ -28,11 +28,11 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
-    @Column(nullable = false)
+    @Column(name = "mdp", nullable = false)
     private String mdp;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "role_id", nullable = false)
     private Role role;
 
     @Column(name = "date_de_creation", nullable = false, updatable = false)
@@ -66,6 +66,5 @@ public class User {
     protected void onCreate() {
         if (dateDeCreation == null) dateDeCreation = Instant.now();
         if (statutCompte == null || statutCompte.isBlank()) statutCompte = "ACTIVE";
-        if (role == null) role = Role.USER;
     }
 }

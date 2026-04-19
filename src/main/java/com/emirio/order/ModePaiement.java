@@ -4,5 +4,6 @@ public enum ModePaiement {
     CARTE,
     LIVRAISON,
     D17,
-    VIREMENT
+    VIREMENT,
+    SIMULE   
 }

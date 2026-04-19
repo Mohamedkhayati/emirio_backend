@@ -1,20 +1,26 @@
 package com.emirio.admin;
 
 import com.emirio.user.Role;
+import com.emirio.user.RoleRepository;
 import com.emirio.user.User;
 import com.emirio.user.UserRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -23,18 +29,21 @@ public class AdminController {
 
     private static final String MAIN_ADMIN_EMAIL = "admin.general@emirio.tn";
 
+    private final RoleRepository roles;
     private final UserRepository users;
     private final AdminAuditLogRepository auditLogs;
     private final PasswordEncoder passwordEncoder;
     private final CurrentActorService currentActorService;
 
     public AdminController(
-        UserRepository users,
-        AdminAuditLogRepository auditLogs,
-        PasswordEncoder passwordEncoder,
-        CurrentActorService currentActorService
+            UserRepository users,
+            RoleRepository roles,
+            AdminAuditLogRepository auditLogs,
+            PasswordEncoder passwordEncoder,
+            CurrentActorService currentActorService
     ) {
         this.users = users;
+        this.roles = roles;
         this.auditLogs = auditLogs;
         this.passwordEncoder = passwordEncoder;
         this.currentActorService = currentActorService;
@@ -43,21 +52,72 @@ public class AdminController {
     @GetMapping({"/users", "/clients"})
     public List<UserDto> listUsers() {
         return users.findAll().stream()
-            .sorted((a, b) -> {
-                Instant da = a.getDateDeCreation();
-                Instant db = b.getDateDeCreation();
-                if (da == null && db == null) return 0;
-                if (da == null) return 1;
-                if (db == null) return -1;
-                return db.compareTo(da);
-            })
-            .map(UserDto::from)
-            .toList();
+                .sorted((a, b) -> {
+                    Instant da = a.getDateDeCreation();
+                    Instant db = b.getDateDeCreation();
+                    if (da == null && db == null) return 0;
+                    if (da == null) return 1;
+                    if (db == null) return -1;
+                    return db.compareTo(da);
+                })
+                .map(UserDto::from)
+                .toList();
     }
 
     @GetMapping({"/users/{id}", "/clients/{id}"})
     public UserDto getUser(@PathVariable Long id) {
         return UserDto.from(requireUser(id));
+    }
+
+    @GetMapping("/check-role")
+    public Map<String, Object> checkRole(Authentication authentication) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("authenticated", authentication != null);
+        if (authentication != null) {
+            response.put("name", authentication.getName());
+            response.put("authorities", authentication.getAuthorities().stream()
+                    .map(a -> a.getAuthority())
+                    .collect(Collectors.toList()));
+        }
+        return response;
+    }
+
+    @GetMapping("/debug/auth")
+    public Map<String, Object> debugAuth(Authentication authentication, HttpServletRequest request) {
+        Map<String, Object> debug = new HashMap<>();
+
+        debug.put("requestURI", request.getRequestURI());
+        debug.put("method", request.getMethod());
+        debug.put("hasAuthentication", authentication != null);
+
+        if (authentication != null) {
+            debug.put("name", authentication.getName());
+            debug.put("authenticated", authentication.isAuthenticated());
+            debug.put("authorities", authentication.getAuthorities().stream()
+                    .map(a -> a.getAuthority())
+                    .collect(Collectors.toList()));
+            debug.put("principal", authentication.getPrincipal().toString());
+            debug.put("credentials", authentication.getCredentials() != null ? "present" : "null");
+            debug.put("details", authentication.getDetails() != null ? authentication.getDetails().toString() : "null");
+        }
+
+        String authHeader = request.getHeader("Authorization");
+        debug.put("authorizationHeader", authHeader != null ? "Bearer [present] length=" + authHeader.length() : "null");
+
+        if (authentication != null && authentication.getName() != null) {
+            try {
+                var user = users.findByEmailIgnoreCase(authentication.getName());
+                if (user.isPresent()) {
+                    debug.put("dbRole", user.get().getRole() != null ? user.get().getRole().getName() : null);
+                    debug.put("dbStatus", user.get().getStatutCompte());
+                    debug.put("dbEmail", user.get().getEmail());
+                }
+            } catch (Exception e) {
+                debug.put("dbError", e.getMessage());
+            }
+        }
+
+        return debug;
     }
 
     @PostMapping("/users")
@@ -78,8 +138,8 @@ public class AdminController {
         u.setRole(parseRole(req.getRole()));
 
         String status = (req.getStatutCompte() == null || req.getStatutCompte().isBlank())
-            ? "ACTIVE"
-            : normalizeStatus(req.getStatutCompte());
+                ? "ACTIVE"
+                : normalizeStatus(req.getStatutCompte());
         u.setStatutCompte(status);
 
         if (u.getDateDeCreation() == null) {
@@ -87,7 +147,7 @@ public class AdminController {
         }
 
         users.save(u);
-        audit(AdminAction.CREATE, u, "Created account with role=" + u.getRole() + ", status=" + u.getStatutCompte());
+        audit(AdminAction.CREATE, u, "Created account with role=" + roleName(u) + ", status=" + u.getStatutCompte());
 
         return UserDto.from(u);
     }
@@ -114,11 +174,11 @@ public class AdminController {
 
         users.save(u);
         audit(
-            AdminAction.EDIT,
-            u,
-            "Edited user info: nom=" + oldNom + "->" + u.getNom()
-                + ", prenom=" + oldPrenom + "->" + u.getPrenom()
-                + ", email=" + oldEmail + "->" + u.getEmail()
+                AdminAction.EDIT,
+                u,
+                "Edited user info: nom=" + oldNom + "->" + u.getNom()
+                        + ", prenom=" + oldPrenom + "->" + u.getPrenom()
+                        + ", email=" + oldEmail + "->" + u.getEmail()
         );
 
         return UserDto.from(u);
@@ -146,13 +206,13 @@ public class AdminController {
         User u = requireUser(id);
         protectMainAdmin(u);
 
-        Role oldRole = u.getRole();
+        String oldRole = roleName(u);
         Role newRole = parseRole(req.getRole());
 
         u.setRole(newRole);
         users.save(u);
 
-        audit(AdminAction.UPDATE_ROLE, u, "Role changed: " + oldRole + " -> " + newRole);
+        audit(AdminAction.UPDATE_ROLE, u, "Role changed: " + oldRole + " -> " + roleName(u));
         return UserDto.from(u);
     }
 
@@ -172,21 +232,21 @@ public class AdminController {
     public List<AdminAuditLogDto> history() {
         currentActorService.requireGeneralAdmin();
         return auditLogs.findAllByOrderByCreatedAtDesc().stream()
-            .map(AdminAuditLogDto::from)
-            .toList();
+                .map(AdminAuditLogDto::from)
+                .toList();
     }
 
     @GetMapping("/users/{id}/history")
     public List<AdminAuditLogDto> userHistory(@PathVariable Long id) {
         currentActorService.requireGeneralAdmin();
         return auditLogs.findByTargetUserIdOrderByCreatedAtDesc(id).stream()
-            .map(AdminAuditLogDto::from)
-            .toList();
+                .map(AdminAuditLogDto::from)
+                .toList();
     }
 
     private User requireUser(Long id) {
         return users.findById(id)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
     }
 
     private void protectMainAdmin(User u) {
@@ -207,11 +267,14 @@ public class AdminController {
     }
 
     private Role parseRole(String rawRole) {
-        try {
-            return Role.valueOf(rawRole.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role");
-        }
+        String roleName = rawRole == null ? "" : rawRole.trim().toUpperCase();
+
+        return roles.findByName(roleName)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role"));
+    }
+
+    private String roleName(User user) {
+        return user.getRole() != null ? user.getRole().getName() : null;
     }
 
     private String normalizeStatus(String status) {
@@ -295,7 +358,7 @@ public class AdminController {
             dto.setNom(u.getNom());
             dto.setPrenom(u.getPrenom());
             dto.setEmail(u.getEmail());
-            dto.setRole(u.getRole() != null ? u.getRole().name() : null);
+            dto.setRole(u.getRole() != null ? u.getRole().getName() : null);
             dto.setStatutCompte(u.getStatutCompte());
             dto.setDateDeCreation(u.getDateDeCreation());
             return dto;

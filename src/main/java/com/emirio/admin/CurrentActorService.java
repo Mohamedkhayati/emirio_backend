@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -24,12 +26,22 @@ public class CurrentActorService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
         }
 
-        boolean isGeneralAdmin = auth.getAuthorities().stream()
+        Set<String> authorities = auth.getAuthorities().stream()
             .map(a -> a.getAuthority())
-            .anyMatch("ROLE_ADMIN_GENERAL"::equals);
+            .collect(Collectors.toSet());
 
-        if (!isGeneralAdmin) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only general admin can perform this action");
+        boolean allowed =
+            authorities.contains("ROLE_ADMIN_GENERAL")
+            || authorities.contains("ROLE_GENERAL_ADMIN")
+            || authorities.contains("ADMIN_GENERAL")
+            || authorities.contains("GENERAL_ADMIN")
+            || authorities.contains("ROLE_VENDEUR");
+
+        if (!allowed) {
+            throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Access denied. Authorities=" + authorities
+            );
         }
     }
 

@@ -1,5 +1,6 @@
 package com.emirio.catalog;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -45,6 +46,7 @@ public class VariationArticle {
     @Column(nullable = false)
     private double prix;
 
+    @JsonIgnore
     @Lob
     @Column(name = "model_3d_data")
     private byte[] model3dData;
@@ -91,5 +93,9 @@ public class VariationArticle {
     @PreUpdate
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+    
+    public String getModel3dUrl() {
+        return model3dData != null ? "/api/articles/variation-model/" + id : null;
     }
 }

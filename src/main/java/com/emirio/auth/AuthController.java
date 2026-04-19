@@ -1,7 +1,7 @@
 package com.emirio.auth;
 
 import com.emirio.security.JwtService;
-import com.emirio.user.Role;
+import com.emirio.user.RoleRepository;
 import com.emirio.user.User;
 import com.emirio.user.UserRepository;
 import jakarta.validation.Valid;
@@ -19,15 +19,18 @@ import java.time.Instant;
 public class AuthController {
 
     private final UserRepository users;
+    private final RoleRepository roles;
     private final PasswordEncoder encoder;
     private final AuthenticationManager authManager;
     private final JwtService jwt;
 
     public AuthController(UserRepository users,
+                          RoleRepository roles,
                           PasswordEncoder encoder,
                           AuthenticationManager authManager,
                           JwtService jwt) {
         this.users = users;
+        this.roles = roles;
         this.encoder = encoder;
         this.authManager = authManager;
         this.jwt = jwt;
@@ -36,19 +39,24 @@ public class AuthController {
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
     public void signup(@Valid @RequestBody SignupRequest req) {
-        if (users.existsByEmail(req.getEmail())) {
+        String email = req.getEmail().trim().toLowerCase();
+
+        if (users.existsByEmailIgnoreCase(email)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already used");
         }
 
+        var userRole = roles.findByName("USER")
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Default role USER not found"));
+
         User u = User.builder()
-            .nom(req.getNom().trim())
-            .prenom(req.getPrenom().trim())
-            .email(req.getEmail().trim().toLowerCase())
-            .mdp(encoder.encode(req.getPassword()))
-            .role(Role.USER)
-            .dateDeCreation(Instant.now())
-            .statutCompte("ACTIVE")
-            .build();
+                .nom(req.getNom().trim())
+                .prenom(req.getPrenom().trim())
+                .email(email)
+                .mdp(encoder.encode(req.getPassword()))
+                .role(userRole)
+                .dateDeCreation(Instant.now())
+                .statutCompte("ACTIVE")
+                .build();
 
         users.save(u);
     }
@@ -58,17 +66,17 @@ public class AuthController {
         String email = req.getEmail().trim().toLowerCase();
 
         authManager.authenticate(
-            new UsernamePasswordAuthenticationToken(email, req.getPassword())
+                new UsernamePasswordAuthenticationToken(email, req.getPassword())
         );
 
-        User user = users.findByEmail(email)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+        User user = users.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
 
         if (!"ACTIVE".equalsIgnoreCase(user.getStatutCompte())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is not active");
         }
 
         String token = jwt.generateToken(user.getEmail());
-        return new AuthResponse(token, user.getRole().name());
+        return new AuthResponse(token, user.getRole().getName());
     }
 }

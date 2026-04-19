@@ -3,12 +3,22 @@ package com.emirio.order;
 import com.emirio.order.dto.CheckoutRequest;
 import com.emirio.order.dto.OrderDetailsDto;
 import com.emirio.order.dto.OrderSummaryDto;
+import com.emirio.order.repo.CommandeRepository;
+import com.emirio.user.User;
+import com.emirio.user.UserRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
+
+import static org.springframework.http.HttpStatus.*;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -17,6 +27,8 @@ import java.util.List;
 public class OrderController {
 
     private final OrderService orderService;
+    private final UserRepository userRepository;
+    private final CommandeRepository commandeRepository;
 
     @PostMapping("/checkout")
     public OrderDetailsDto checkout(
@@ -48,6 +60,31 @@ public class OrderController {
         Authentication authentication
     ) {
         return orderService.cancel(authentication.getName(), id);
+    }
+
+    @PatchMapping("/{id}/simulate-payment")
+    @Transactional
+    public ResponseEntity<?> simulatePayment(@PathVariable Long id, Authentication auth) {
+        User user = userRepository.findByEmail(auth.getName())
+            .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Unauthorized"));
+
+        Commande commande = commandeRepository.findByIdAndClientId(id, user.getId())
+            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Order not found"));
+
+        if (commande.getStatutPaiement() == StatutPaiement.PAYE) {
+            throw new ResponseStatusException(BAD_REQUEST, "Order already paid");
+        }
+
+        commande.setStatutPaiement(StatutPaiement.PAYE);
+        commande.setStatutCommande(StatutCommande.CONFIRMEE);
+        commande.setPaymentInstructions("Fake payment applied via /simulate-payment endpoint");
+        commandeRepository.save(commande);
+
+        return ResponseEntity.ok(Map.of(
+            "message", "Fake payment successful",
+            "orderId", id,
+            "status", "PAID"
+        ));
     }
 
     @PatchMapping("/{id}/archive")

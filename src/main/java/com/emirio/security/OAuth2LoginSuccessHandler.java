@@ -1,6 +1,6 @@
 package com.emirio.security;
 
-import com.emirio.user.Role;
+import com.emirio.user.RoleRepository;
 import com.emirio.user.User;
 import com.emirio.user.UserRepository;
 import jakarta.servlet.ServletException;
@@ -21,21 +21,25 @@ import java.util.Map;
 public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final JwtService jwtService;
 
     @Value("${app.frontend.url}")
     private String frontendUrl;
 
-    public OAuth2LoginSuccessHandler(UserRepository userRepository, JwtService jwtService) {
+    public OAuth2LoginSuccessHandler(UserRepository userRepository,
+                                     RoleRepository roleRepository,
+                                     JwtService jwtService) {
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
         this.jwtService = jwtService;
     }
 
     @Override
     public void onAuthenticationSuccess(
-        HttpServletRequest request,
-        HttpServletResponse response,
-        Authentication authentication
+            HttpServletRequest request,
+            HttpServletResponse response,
+            Authentication authentication
     ) throws IOException, ServletException {
 
         OAuth2User oauth2User = (OAuth2User) authentication.getPrincipal();
@@ -49,15 +53,17 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             return;
         }
 
-        User user = userRepository.findByEmail(email).orElseGet(() -> {
+        User user = userRepository.findByEmailIgnoreCase(email).orElseGet(() -> {
+            var userRole = roleRepository.findByName("USER")
+                    .orElseThrow(() -> new IllegalStateException("Role USER not found"));
+
             User u = new User();
             u.setEmail(email.trim().toLowerCase());
 
             String[] names = splitName(fullName);
             u.setPrenom(names[0]);
             u.setNom(names[1]);
-
-            u.setRole(Role.USER);
+            u.setRole(userRole);
             u.setStatutCompte("ACTIVE");
             u.setMdp("SOCIAL_LOGIN");
 

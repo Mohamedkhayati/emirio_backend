@@ -9,6 +9,7 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import com.emirio.order.repo.ActionCommandeRepository;
 import java.util.UUID;
 
 @Entity
@@ -75,6 +76,8 @@ public class Commande {
 
     @OneToMany(mappedBy = "commande", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<LigneCommande> lignes = new ArrayList<>();
+    @OneToMany(mappedBy = "commande", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Paiement> paiements = new ArrayList<>();
 
     private String cardLast4;
     private String d17Phone;
@@ -94,6 +97,9 @@ public class Commande {
 
     @Column(length = 1000)
     private String adminDecisionNote;
+    @OneToMany(mappedBy = "commande", cascade = CascadeType.ALL, orphanRemoval = false)
+    @OrderBy("dateAction DESC")
+    private List<ActionCommande> actions = new ArrayList<>();
 
     @PrePersist
     void onCreate() {
@@ -110,8 +116,13 @@ public class Commande {
             referenceCommande = "CMD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         }
     }
+    public void addPaiement(Paiement paiement) {
+        paiements.add(paiement);
+        paiement.setCommande(this);
+    }
 
     public void addLigne(LigneCommande ligne) {
+        if (ligne == null) return;
         ligne.setCommande(this);
         this.lignes.add(ligne);
     }

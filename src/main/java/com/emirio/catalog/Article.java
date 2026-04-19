@@ -1,6 +1,7 @@
 package com.emirio.catalog;
 
 import com.emirio.user.User;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -54,6 +55,7 @@ public class Article {
     @Column(length = 120, unique = true)
     private String sku;
 
+    @JsonIgnore
     @Lob
     @Column(name = "image_data1")
     private byte[] imageData1;
@@ -64,6 +66,7 @@ public class Article {
     @Column(name = "image_type1")
     private String imageType1;
 
+    @JsonIgnore
     @Lob
     @Column(name = "image_data2")
     private byte[] imageData2;
@@ -74,6 +77,7 @@ public class Article {
     @Column(name = "image_type2")
     private String imageType2;
 
+    @JsonIgnore
     @Lob
     @Column(name = "image_data3")
     private byte[] imageData3;
@@ -84,6 +88,7 @@ public class Article {
     @Column(name = "image_type3")
     private String imageType3;
 
+    @JsonIgnore
     @Lob
     @Column(name = "image_data4")
     private byte[] imageData4;
@@ -140,5 +145,22 @@ public class Article {
     @PreUpdate
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+    
+    // Helper methods to get image URLs (not the data)
+    public String getImageUrl1() {
+        return imageData1 != null ? "/api/articles/" + id + "/image/1" : null;
+    }
+    
+    public String getImageUrl2() {
+        return imageData2 != null ? "/api/articles/" + id + "/image/2" : null;
+    }
+    
+    public String getImageUrl3() {
+        return imageData3 != null ? "/api/articles/" + id + "/image/3" : null;
+    }
+    
+    public String getImageUrl4() {
+        return imageData4 != null ? "/api/articles/" + id + "/image/4" : null;
     }
 }

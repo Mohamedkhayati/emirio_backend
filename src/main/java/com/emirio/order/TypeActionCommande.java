@@ -1,0 +1,9 @@
+package com.emirio.order;
+
+public enum TypeActionCommande {
+    CREATION_COMMANDE,
+    ANNULATION_COMMANDE,
+    ARCHIVAGE_COMMANDE,
+    CHANGEMENT_STATUT,
+    CHANGEMENT_STATUT_PAIEMENT
+}

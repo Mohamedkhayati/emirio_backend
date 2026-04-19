@@ -71,7 +71,7 @@ public class SecurityConfig {
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
             .requestCache(cache -> cache.disable())
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((request, response, authException) -> {
                     logger.error("Unauthorized error. URI: {}, AuthException: {}", request.getRequestURI(), authException.getMessage());
@@ -85,7 +85,6 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                // FIX: Use single * in the middle instead of ** for Spring Boot 3 compatibility
                 .requestMatchers(HttpMethod.GET, "/api/catalog/variations/*/images/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/catalog/variations/*/model").permitAll()
 
@@ -104,14 +103,16 @@ public class SecurityConfig {
                     "/api/sizes/**"
                 ).permitAll()
 
+                // GET endpoints - Allow CONTROLEUR to read
                 .requestMatchers(HttpMethod.GET,
                     "/api/admin/articles/**",
                     "/api/admin/categories/**",
                     "/api/admin/colors/**",
                     "/api/admin/sizes/**",
                     "/api/admin/variations/**"
-                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR", "USER")
+                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR", "CONTROLEUR")
 
+                // POST/PUT/PATCH/DELETE - Only ADMIN_GENERAL and VENDEUR
                 .requestMatchers(HttpMethod.POST,
                     "/api/admin/articles/**",
                     "/api/admin/categories/**",
@@ -144,12 +145,24 @@ public class SecurityConfig {
                     "/api/admin/variations/**"
                 ).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
 
+                // Users management - only ADMIN_GENERAL
                 .requestMatchers(
                     "/api/admin/users/**",
-                    "/api/admin/clients/**",
-                    "/api/admin/orders/**",
+                    "/api/admin/clients/**"
+                ).hasRole("ADMIN_GENERAL")
+
+                // Orders - ADMIN_GENERAL and CONTROLEUR
+                .requestMatchers(
+                    "/api/admin/orders/**"
+                ).hasAnyRole("ADMIN_GENERAL", "CONTROLEUR")
+
+                // Dashboard - only ADMIN_GENERAL
+                .requestMatchers(
                     "/api/admin/dashboard/**"
                 ).hasRole("ADMIN_GENERAL")
+
+                // Admin root - allow all admin roles to see the admin panel
+                .requestMatchers("/admin", "/admin/**").hasAnyRole("ADMIN_GENERAL", "VENDEUR", "CONTROLEUR")
 
                 .anyRequest().authenticated()
             )

@@ -2,9 +2,14 @@ package com.emirio.admin;
 
 import com.emirio.order.Commande;
 import com.emirio.order.LigneCommande;
+import com.emirio.order.Paiement;
 import com.emirio.order.StatutCommande;
 import com.emirio.order.StatutPaiement;
+import com.emirio.order.repo.ActionCommandeRepository;
 import com.emirio.order.repo.CommandeRepository;
+import com.emirio.order.repo.PaiementRepository;
+import com.emirio.order.ActionCommande;
+
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -25,10 +31,17 @@ public class AdminOrderController {
 
     private final CommandeRepository commandes;
     private final OrderMailService orderMailService;
+    private final PaiementRepository paiementRepository;
+    private final ActionCommandeRepository actionCommandeRepository;
 
-    public AdminOrderController(CommandeRepository commandes, OrderMailService orderMailService) {
+    public AdminOrderController(CommandeRepository commandes, 
+                                OrderMailService orderMailService, 
+                                PaiementRepository paiementRepository,
+                                ActionCommandeRepository actionCommandeRepository) {
         this.commandes = commandes;
         this.orderMailService = orderMailService;
+        this.paiementRepository = paiementRepository;
+        this.actionCommandeRepository = actionCommandeRepository;
     }
 
     @GetMapping
@@ -40,22 +53,54 @@ public class AdminOrderController {
             .toList();
     }
 
+    @GetMapping("/{id}/actions")
+    public ResponseEntity<?> getOrderActions(@PathVariable Long id) {
+        Commande commande = requireOrder(id);
+        List<ActionCommande> actions = actionCommandeRepository.findByCommandeIdOrderByDateActionDesc(id);
+        List<Map<String, Object>> result = actions.stream().map(a -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", a.getId());
+            map.put("typeAction", a.getTypeAction() != null ? a.getTypeAction().name() : null);
+            map.put("dateAction", a.getDateAction());
+            map.put("ancienStatut", a.getAncienStatut());
+            map.put("nouveauStatut", a.getNouveauStatut());
+            map.put("details", a.getDetails());
+            map.put("utilisateurNom", a.getUtilisateur() != null ? (a.getUtilisateur().getPrenom() + " " + a.getUtilisateur().getNom()) : null);
+            return map;
+        }).toList();
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/{id}/payments")
+    public ResponseEntity<?> getPayments(@PathVariable Long id) {
+        Commande commande = requireOrder(id);
+        List<Paiement> payments = paiementRepository.findByCommandeIdOrderByDatePaiementDesc(id);
+        List<Map<String, Object>> result = payments.stream().map(p -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", p.getId());
+            map.put("montant", p.getMontant());
+            map.put("datePaiement", p.getDatePaiement());
+            map.put("modePaiement", p.getModePaiement() != null ? p.getModePaiement().name() : null);
+            map.put("statutPaiement", p.getStatutPaiement() != null ? p.getStatutPaiement().name() : null);
+            map.put("referenceTransaction", p.getReferenceTransaction());
+            map.put("details", p.getDetails());
+            return map;
+        }).toList();
+        return ResponseEntity.ok(result);
+    }
+
     @PatchMapping("/{id}/status")
     @Transactional
     public ResponseEntity<?> updateStatus(@PathVariable Long id, @RequestBody UpdateStatusReq req) {
         Commande commande = requireOrder(id);
-
         StatutCommande newStatus = StatutCommande.valueOf(req.getStatutCommande().trim().toUpperCase());
         commande.setStatutCommande(newStatus);
-
         Commande saved = commandes.save(commande);
-
         if (newStatus == StatutCommande.CONFIRMEE) {
             orderMailService.sendConfirmedEmail(saved);
         } else if (newStatus == StatutCommande.ANNULEE) {
             orderMailService.sendCancelledEmail(saved);
         }
-
         return ResponseEntity.ok(Map.of(
             "message", "Order status updated successfully",
             "status", saved.getStatutCommande().name(),
@@ -83,34 +128,26 @@ public class AdminOrderController {
     @Transactional
     public ResponseEntity<?> reviewPayment(@PathVariable Long id, @RequestBody PaymentReviewReq req) {
         Commande commande = requireOrder(id);
-
         try {
             commande.setAdminDecisionNote(req.getNote());
-        } catch (Exception ignored) {
-        }
-
+        } catch (Exception ignored) {}
         if (req.isAccepted()) {
             try {
                 commande.setStatutPaiement(StatutPaiement.ACCEPTE);
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) {}
             commande.setStatutCommande(StatutCommande.CONFIRMEE);
         } else {
             try {
                 commande.setStatutPaiement(StatutPaiement.REFUSE);
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) {}
             commande.setStatutCommande(StatutCommande.ANNULEE);
         }
-
         Commande saved = commandes.save(commande);
-
         if (req.isAccepted()) {
             orderMailService.sendPaymentAcceptedEmail(saved);
         } else {
             orderMailService.sendPaymentRejectedEmail(saved);
         }
-
         return ResponseEntity.ok(Map.of(
             "message", "Payment reviewed successfully",
             "order", toDto(saved)
@@ -121,16 +158,12 @@ public class AdminOrderController {
     @Transactional
     public ResponseEntity<?> delivered(@PathVariable Long id) {
         Commande commande = requireOrder(id);
-
         commande.setStatutCommande(StatutCommande.LIVREE);
         try {
             commande.setDeliveredAt(LocalDateTime.now());
-        } catch (Exception ignored) {
-        }
-
+        } catch (Exception ignored) {}
         Commande saved = commandes.save(commande);
         orderMailService.sendDeliveredEmail(saved);
-
         return ResponseEntity.ok(Map.of(
             "message", "Order marked as delivered",
             "order", toDto(saved)
@@ -141,11 +174,9 @@ public class AdminOrderController {
     @Transactional
     public ResponseEntity<?> archive(@PathVariable Long id) {
         Commande commande = requireOrder(id);
-
         commande.setArchived(true);
         Commande saved = commandes.save(commande);
         orderMailService.sendArchivedEmail(saved);
-
         return ResponseEntity.ok(Map.of(
             "message", "Order archived successfully",
             "archived", true,
@@ -157,10 +188,8 @@ public class AdminOrderController {
     @Transactional
     public ResponseEntity<?> unarchive(@PathVariable Long id) {
         Commande commande = requireOrder(id);
-
         commande.setArchived(false);
         Commande saved = commandes.save(commande);
-
         return ResponseEntity.ok(Map.of(
             "message", "Order restored successfully",
             "archived", false,
@@ -179,97 +208,33 @@ public class AdminOrderController {
         d.setReferenceCommande(c.getReferenceCommande());
         d.setDateCommande(c.getDateCommande());
         d.setStatutCommande(c.getStatutCommande() != null ? c.getStatutCommande().name() : null);
-
         try {
             d.setStatutPaiement(c.getStatutPaiement() != null ? c.getStatutPaiement().name() : null);
-        } catch (Exception ignored) {
-        }
-
+        } catch (Exception ignored) {}
         d.setTotal(c.getTotal());
         d.setArchived(c.isArchived());
         d.setNomClient(c.getNomClient());
         d.setPrenomClient(c.getPrenomClient());
         d.setEmailClient(c.getEmailClient());
         d.setTelephone(c.getTelephone());
-
-        try {
-            d.setAdresse(c.getAdresse());
-        } catch (Exception ignored) {
-        }
-
+        try { d.setAdresse(c.getAdresse()); } catch (Exception ignored) {}
         d.setVille(c.getVille());
-
-        try {
-            d.setCodePostal(c.getCodePostal());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setModePaiement(c.getModePaiement() != null ? c.getModePaiement().name() : null);
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setCardLast4(c.getCardLast4());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setD17Phone(c.getD17Phone());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setD17Reference(c.getD17Reference());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setBankReference(c.getBankReference());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setPaymentInstructions(c.getPaymentInstructions());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setSignatureDataUrl(c.getSignatureDataUrl());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setInvoiceNumber(c.getInvoiceNumber());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setInvoiceUrl(c.getInvoiceUrl());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setAdminDecisionNote(c.getAdminDecisionNote());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setDeliveredAt(c.getDeliveredAt());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setNote(c.getNote());
-        } catch (Exception ignored) {
-        }
-
-        List<AdminOrderLineDto> lignes = c.getLignes() == null
-            ? List.of()
-            : c.getLignes().stream().map(this::toLineDto).toList();
+        try { d.setCodePostal(c.getCodePostal()); } catch (Exception ignored) {}
+        try { d.setModePaiement(c.getModePaiement() != null ? c.getModePaiement().name() : null); } catch (Exception ignored) {}
+        try { d.setCardLast4(c.getCardLast4()); } catch (Exception ignored) {}
+        try { d.setD17Phone(c.getD17Phone()); } catch (Exception ignored) {}
+        try { d.setD17Reference(c.getD17Reference()); } catch (Exception ignored) {}
+        try { d.setBankReference(c.getBankReference()); } catch (Exception ignored) {}
+        try { d.setPaymentInstructions(c.getPaymentInstructions()); } catch (Exception ignored) {}
+        try { d.setSignatureDataUrl(c.getSignatureDataUrl()); } catch (Exception ignored) {}
+        try { d.setInvoiceNumber(c.getInvoiceNumber()); } catch (Exception ignored) {}
+        try { d.setInvoiceUrl(c.getInvoiceUrl()); } catch (Exception ignored) {}
+        try { d.setAdminDecisionNote(c.getAdminDecisionNote()); } catch (Exception ignored) {}
+        try { d.setDeliveredAt(c.getDeliveredAt()); } catch (Exception ignored) {}
+        try { d.setNote(c.getNote()); } catch (Exception ignored) {}
+        List<AdminOrderLineDto> lignes = c.getLignes() == null ? List.of() : c.getLignes().stream().map(this::toLineDto).toList();
         d.setLignes(lignes);
         d.setNombreLignes(lignes.size());
-
         return d;
     }
 
@@ -279,22 +244,9 @@ public class AdminOrderController {
         d.setArticleId(l.getArticleId());
         d.setVariationId(l.getVariationId());
         d.setNomProduit(l.getNomProduit());
-
-        try {
-            d.setImageUrl(l.getImageUrl());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setCouleurNom(l.getCouleurNom());
-        } catch (Exception ignored) {
-        }
-
-        try {
-            d.setTaillePointure(l.getTaillePointure());
-        } catch (Exception ignored) {
-        }
-
+        try { d.setImageUrl(l.getImageUrl()); } catch (Exception ignored) {}
+        try { d.setCouleurNom(l.getCouleurNom()); } catch (Exception ignored) {}
+        try { d.setTaillePointure(l.getTaillePointure()); } catch (Exception ignored) {}
         d.setQuantite(l.getQuantite());
         d.setPrixUnitaire(l.getPrixUnitaire());
         d.setSousTotal(l.getSousTotal());

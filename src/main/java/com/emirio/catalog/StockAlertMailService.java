@@ -1,6 +1,5 @@
 package com.emirio.catalog;
 
-import com.emirio.user.Role;
 import com.emirio.user.User;
 import com.emirio.user.UserRepository;
 import org.slf4j.Logger;
@@ -33,7 +32,7 @@ public class StockAlertMailService {
     public void sendOutOfStockAlert(VariationArticle variation, int currentStock) {
         Set<String> recipients = new LinkedHashSet<>();
 
-        List<User> admins = users.findByRoleAndStatutCompteIgnoreCase(Role.ADMIN_GENERAL, "ACTIVE");
+        List<User> admins = users.findByRole_NameAndStatutCompteIgnoreCase("ADMIN_GENERAL", "ACTIVE");
         for (User admin : admins) {
             if (admin.getEmail() != null && !admin.getEmail().isBlank()) {
                 recipients.add(admin.getEmail().trim().toLowerCase());
@@ -43,8 +42,8 @@ public class StockAlertMailService {
         if (variation.getArticle() != null && variation.getArticle().getVendeur() != null) {
             User vendeur = variation.getArticle().getVendeur();
             if ("ACTIVE".equalsIgnoreCase(vendeur.getStatutCompte())
-                && vendeur.getEmail() != null
-                && !vendeur.getEmail().isBlank()) {
+                    && vendeur.getEmail() != null
+                    && !vendeur.getEmail().isBlank()) {
                 recipients.add(vendeur.getEmail().trim().toLowerCase());
             }
         }
@@ -55,22 +54,20 @@ public class StockAlertMailService {
 
         String articleName = variation.getArticle() != null ? safe(variation.getArticle().getNom()) : "Article inconnu";
         String couleur = variation.getCouleur() != null ? safe(variation.getCouleur().getNom()) : "Sans couleur";
-        String taille = variation.getTaille() != null
-            ? "ID " + variation.getTaille().getId()
-            : "Sans taille";
+        String taille = variation.getTaille() != null ? "ID " + variation.getTaille().getId() : "Sans taille";
 
         String subject = "Rupture de stock - " + articleName;
 
         String body =
-            "Bonjour,\n\n" +
-            "Une variation est en rupture de stock.\n\n" +
-            "Article : " + articleName + "\n" +
-            "Variation ID : " + variation.getId() + "\n" +
-            "Couleur : " + couleur + "\n" +
-            "Taille : " + taille + "\n" +
-            "Stock actuel : " + currentStock + "\n\n" +
-            "Merci de réapprovisionner cet article.\n\n" +
-            "EMIRIO";
+                "Bonjour,\n\n" +
+                "Une variation est en rupture de stock.\n\n" +
+                "Article : " + articleName + "\n" +
+                "Variation ID : " + variation.getId() + "\n" +
+                "Couleur : " + couleur + "\n" +
+                "Taille : " + taille + "\n" +
+                "Stock actuel : " + currentStock + "\n\n" +
+                "Merci de réapprovisionner cet article.\n\n" +
+                "EMIRIO";
 
         try {
             SimpleMailMessage message = new SimpleMailMessage();

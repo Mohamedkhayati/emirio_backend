@@ -17,16 +17,13 @@ public class LigneCommande {
     private Long id;
 
     private Long articleId;
-
     private Long variationId;
 
     @Column(nullable = false)
     private String nomProduit;
 
     private String imageUrl;
-
     private String couleurNom;
-
     private String taillePointure;
 
     @Column(nullable = false)

@@ -10,7 +10,9 @@ import com.emirio.order.dto.CheckoutRequest;
 import com.emirio.order.dto.OrderDetailsDto;
 import com.emirio.order.dto.OrderLineDto;
 import com.emirio.order.dto.OrderSummaryDto;
+import com.emirio.order.repo.ActionCommandeRepository;
 import com.emirio.order.repo.CommandeRepository;
+import com.emirio.order.repo.PaiementRepository;
 import com.emirio.user.User;
 import com.emirio.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,9 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.springframework.http.HttpStatus.BAD_REQUEST;
-import static org.springframework.http.HttpStatus.NOT_FOUND;
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
+import static org.springframework.http.HttpStatus.*;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +35,8 @@ public class OrderService {
     private final VariationRepository variationRepository;
     private final InvoiceService invoiceService;
     private final OrderMailService orderMailService;
+    private final ActionCommandeRepository actionCommandeRepository;
+    private final PaiementRepository paiementRepository;
 
     @Transactional
     public OrderDetailsDto checkout(String email, CheckoutRequest req) {
@@ -65,12 +67,20 @@ public class OrderService {
         commande.setSignatureDataUrl(blankToNull(req.getSignatureDataUrl()));
         commande.setSignedAt(isBlank(req.getSignatureDataUrl()) ? null : LocalDateTime.now());
         commande.setArchived(false);
-        commande.setStatutCommande(StatutCommande.EN_ATTENTE);
-        commande.setStatutPaiement(
-            commande.getModePaiement() == ModePaiement.LIVRAISON
-                ? StatutPaiement.NON_REQUIS
-                : StatutPaiement.EN_ATTENTE_VERIFICATION
-        );
+
+        // FAKE PAYMENT HANDLER – SIMULE
+        if (commande.getModePaiement() == ModePaiement.SIMULE) {
+            commande.setStatutPaiement(StatutPaiement.PAYE);
+            commande.setStatutCommande(StatutCommande.CONFIRMEE);
+            commande.setPaymentInstructions("✅ Paiement simulé (PFE). Aucune action requise.");
+        } else {
+            commande.setStatutCommande(StatutCommande.EN_ATTENTE);
+            commande.setStatutPaiement(
+                commande.getModePaiement() == ModePaiement.LIVRAISON
+                    ? StatutPaiement.NON_REQUIS
+                    : StatutPaiement.EN_ATTENTE_VERIFICATION
+            );
+        }
 
         double total = 0.0;
 
@@ -82,18 +92,15 @@ public class OrderService {
             int requestedQty = Math.max(1, lignePanier.getQuantite());
 
             VariationArticle variation = variationRepository.findById(lignePanier.getVariationId())
-                .orElseThrow(() -> new ResponseStatusException(
-                    BAD_REQUEST,
-                    "Variation not found: " + lignePanier.getVariationId()
-                ));
+                .orElseThrow(() -> new ResponseStatusException(BAD_REQUEST,
+                    "Variation not found: " + lignePanier.getVariationId()));
 
-            int currentStock = Math.max(0, variation.getQuantiteStock());
+            Integer stockValue = variation.getQuantiteStock();
+            int currentStock = stockValue == null ? 0 : stockValue;
 
             if (currentStock < requestedQty) {
-                throw new ResponseStatusException(
-                    BAD_REQUEST,
-                    "Insufficient stock for " + lignePanier.getNomProduit()
-                );
+                throw new ResponseStatusException(BAD_REQUEST,
+                    "Insufficient stock for " + lignePanier.getNomProduit());
             }
 
             variation.setQuantiteStock(currentStock - requestedQty);
@@ -114,9 +121,34 @@ public class OrderService {
         }
 
         commande.setTotal(total);
-        commande.setPaymentInstructions(buildPaymentInstructions(commande));
+
+        if (commande.getModePaiement() != ModePaiement.SIMULE) {
+            commande.setPaymentInstructions(buildPaymentInstructions(commande));
+        }
 
         Commande saved = commandeRepository.saveAndFlush(commande);
+
+        // 👇 CREATE PAYMENT RECORD FOR SIMULE (only after saved is defined)
+        if (saved.getModePaiement() == ModePaiement.SIMULE) {
+            Paiement paiement = new Paiement(
+                saved,
+                saved.getTotal(),
+                saved.getModePaiement(),
+                StatutPaiement.PAYE,
+                "SIMULE_" + saved.getReferenceCommande(),
+                "Paiement simulé (PFE) – automatiquement accepté"
+            );
+            paiementRepository.save(paiement);
+        }
+
+        logAction(
+            saved,
+            user,
+            TypeActionCommande.CREATION_COMMANDE,
+            null,
+            saved.getStatutCommande() != null ? saved.getStatutCommande().name() : null,
+            "Commande créée depuis le checkout"
+        );
 
         if (isBlank(saved.getInvoiceNumber())) {
             saved.setInvoiceNumber(saved.getReferenceCommande());
@@ -125,7 +157,7 @@ public class OrderService {
         saved.setInvoiceUrl(invoiceService.generateProformaInvoice(saved));
         saved = commandeRepository.save(saved);
 
-        panier.getLignes().clear();
+        panier.clearLignes();
         panier.setDateMaj(LocalDateTime.now());
         panierRepository.save(panier);
 
@@ -140,28 +172,23 @@ public class OrderService {
     @Transactional(readOnly = true)
     public List<OrderSummaryDto> myOrders(String email, Boolean archived) {
         User user = currentUser(email);
-
         List<Commande> commandes = archived == null
             ? commandeRepository.findByClientIdOrderByDateCommandeDesc(user.getId())
             : commandeRepository.findByClientIdAndArchivedOrderByDateCommandeDesc(user.getId(), archived);
-
         return commandes.stream().map(this::toSummaryDto).toList();
     }
 
     @Transactional(readOnly = true)
     public OrderDetailsDto details(String email, Long id) {
         User user = currentUser(email);
-
         Commande commande = commandeRepository.findByIdAndClientId(id, user.getId())
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Order not found"));
-
         return toDetailsDto(commande);
     }
 
     @Transactional
     public OrderDetailsDto cancel(String email, Long id) {
         User user = currentUser(email);
-
         Commande commande = commandeRepository.findByIdAndClientId(id, user.getId())
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Order not found"));
 
@@ -169,44 +196,62 @@ public class OrderService {
             throw new ResponseStatusException(BAD_REQUEST, "This order can no longer be cancelled");
         }
 
+        String ancienStatut = commande.getStatutCommande().name();
         commande.setStatutCommande(StatutCommande.ANNULEE);
+        Commande saved = commandeRepository.save(commande);
 
-        // Stock is NOT restored here on purpose.
-        return toDetailsDto(commandeRepository.save(commande));
+        logAction(saved, user, TypeActionCommande.ANNULATION_COMMANDE,
+                  ancienStatut, saved.getStatutCommande().name(),
+                  "Commande annulée par le client");
+        return toDetailsDto(saved);
     }
 
     @Transactional
     public OrderDetailsDto archive(String email, Long id) {
         User user = currentUser(email);
-
         Commande commande = commandeRepository.findByIdAndClientId(id, user.getId())
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Order not found"));
-
         commande.setArchived(true);
-        return toDetailsDto(commandeRepository.save(commande));
+        Commande saved = commandeRepository.save(commande);
+        logAction(saved, user, TypeActionCommande.ARCHIVAGE_COMMANDE,
+                  null, null, "Commande archivée par le client");
+        return toDetailsDto(saved);
+    }
+
+    // --------------------- PRIVATE HELPERS ---------------------
+
+    private void logAction(Commande commande, User user, TypeActionCommande typeAction,
+                           String ancienStatut, String nouveauStatut, String details) {
+        ActionCommande action = new ActionCommande();
+        action.setCommande(commande);
+        action.setUtilisateur(user);
+        action.setTypeAction(typeAction);
+        action.setAncienStatut(ancienStatut);
+        action.setNouveauStatut(nouveauStatut);
+        action.setDetails(details);
+        actionCommandeRepository.save(action);
     }
 
     private User currentUser(String email) {
-        if (email == null || email.isBlank()) {
+        if (email == null || email.isBlank())
             throw new ResponseStatusException(UNAUTHORIZED, "Unauthorized");
-        }
-
         return userRepository.findByEmail(email)
             .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Unauthorized"));
     }
 
     private ModePaiement parseModePaiement(String value) {
-        if (value == null || value.isBlank()) {
+        if (value == null || value.isBlank()) return ModePaiement.LIVRAISON;
+        try {
+            return ModePaiement.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
             return ModePaiement.LIVRAISON;
         }
-        return ModePaiement.valueOf(value.trim().toUpperCase());
     }
 
     private String buildPaymentInstructions(Commande c) {
         if (c.getModePaiement() == null) {
             return "Suivez les instructions de paiement envoyées par email.";
         }
-
         return switch (c.getModePaiement()) {
             case LIVRAISON -> "Paiement à la livraison.";
             case CARTE -> {
@@ -215,6 +260,7 @@ public class OrderService {
             }
             case D17 -> "Veuillez effectuer le paiement via D17 et conserver la référence de paiement.";
             case VIREMENT -> "Veuillez effectuer le virement bancaire et conserver la référence du virement.";
+            case SIMULE -> "✅ Paiement simulé (PFE). Aucune action requise.";
         };
     }
 
@@ -224,22 +270,17 @@ public class OrderService {
         return digits.length() <= 4 ? digits : digits.substring(digits.length() - 4);
     }
 
-    private boolean isBlank(String v) {
-        return v == null || v.isBlank();
-    }
-
-    private String blankToNull(String v) {
-        return isBlank(v) ? null : v.trim();
-    }
+    private boolean isBlank(String v) { return v == null || v.isBlank(); }
+    private String blankToNull(String v) { return isBlank(v) ? null : v.trim(); }
 
     private OrderSummaryDto toSummaryDto(Commande c) {
         OrderSummaryDto d = new OrderSummaryDto();
         d.setId(c.getId());
         d.setReferenceCommande(c.getReferenceCommande());
         d.setDateCommande(c.getDateCommande());
-        d.setStatutCommande(c.getStatutCommande().name());
+        d.setStatutCommande(c.getStatutCommande() != null ? c.getStatutCommande().name() : null);
         d.setTotal(c.getTotal());
-        d.setNombreLignes(c.getLignes().size());
+        d.setNombreLignes(c.getLignes() != null ? c.getLignes().size() : 0);
         d.setArchived(c.isArchived());
         return d;
     }
@@ -249,12 +290,11 @@ public class OrderService {
         d.setId(c.getId());
         d.setReferenceCommande(c.getReferenceCommande());
         d.setDateCommande(c.getDateCommande());
-        d.setStatutCommande(c.getStatutCommande().name());
+        d.setStatutCommande(c.getStatutCommande() != null ? c.getStatutCommande().name() : null);
         d.setStatutPaiement(c.getStatutPaiement() != null ? c.getStatutPaiement().name() : null);
         d.setTotal(c.getTotal());
         d.setArchived(c.isArchived());
         d.setCancelable(c.getStatutCommande() == StatutCommande.EN_ATTENTE);
-
         d.setNomClient(c.getNomClient());
         d.setPrenomClient(c.getPrenomClient());
         d.setEmailClient(c.getEmailClient());
@@ -282,7 +322,6 @@ public class OrderService {
             x.setImageUrl(l.getImageUrl());
             return x;
         }).toList();
-
         d.setLignes(lines);
         return d;
     }
