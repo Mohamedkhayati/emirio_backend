@@ -13,6 +13,12 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
 
     @EntityGraph(attributePaths = "categorie")
     List<Article> findAllByOrderByIdDesc();
+ // Find all articles owned by a seller (vendeur)
+    @EntityGraph(attributePaths = "categorie")
+    List<Article> findByVendeurIdOrderByIdDesc(Long vendeurId);
+
+    // Check existence of SKU for a seller's article (excluding given id)
+    boolean existsBySkuIgnoreCaseAndVendeurIdAndIdNot(String sku, Long vendeurId, Long id);
 
     List<Article> findByCategorieIdAndActifTrue(Long categorieId);
 

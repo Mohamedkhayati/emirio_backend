@@ -7,4 +7,5 @@ import java.util.Optional;
 
 public interface LignePanierRepository extends JpaRepository<LignePanier, Long> {
     Optional<LignePanier> findByPanierIdAndVariationId(Long panierId, Long variationId);
+    
 }

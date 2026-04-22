@@ -267,12 +267,56 @@ public class AdminController {
     }
 
     private Role parseRole(String rawRole) {
-        String roleName = rawRole == null ? "" : rawRole.trim().toUpperCase();
+        if (rawRole == null || rawRole.trim().isEmpty()) {
+            return roles.findByName("USER")
+                    .orElseGet(() -> roles.findByName("Client")
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Default role not found")));
+        }
+        
+        String normalized = rawRole.trim().toUpperCase();
+        String targetRoleName;
+        
+        // Map everything to the EXACT strings stored in your Database & SecurityConfig
+        switch (normalized) {
+            case "ADMINISTRATEUR":
+            case "ADMIN_GENERAL":
+            case "ADMIN":
+            case "ROLE_ADMIN_GENERAL":
+                targetRoleName = "Administrateur";
+                break;
+                
+            case "GESTIONNAIRE DE CATALOGUE":
+            case "GESTIONNAIRE_DE_CATALOGUE":
+            case "VENDEUR":
+            case "ROLE_VENDEUR":
+                targetRoleName = "Gestionnaire de catalogue";
+                break;
+                
+            case "RESPONSABLE E-COMMERCE":
+            case "RESPONSABLE_E_COMMERCE":
+            case "CONTROLEUR":
+            case "ROLE_CONTROLEUR":
+                targetRoleName = "Responsable e-commerce";
+                break;
+                
+            case "CLIENT":
+            case "USER": 
+            case "ROLE_USER":
+            case "ROLE_CLIENT":
+                targetRoleName = "USER"; 
+                break;
+                
+            default:
+                targetRoleName = rawRole;
+        }
 
-        return roles.findByName(roleName)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role"));
+        // 1. Try mapped name -> 2. Try raw string -> 3. Fallback to "Client" if "USER" misses
+        return roles.findByName(targetRoleName)
+                .orElseGet(() -> roles.findByName(rawRole)
+                .orElseGet(() -> roles.findByName("Client") 
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role: " + rawRole))));
     }
-
+    
     private String roleName(User user) {
         return user.getRole() != null ? user.getRole().getName() : null;
     }

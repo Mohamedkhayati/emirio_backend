@@ -53,9 +53,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:5173"));
+        config.setAllowedOrigins(List.of("http://localhost:5173", "http://127.0.0.1:5173"));
+        
+        // Explicitly add OPTIONS here
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        
+        // Must include Authorization and Content-Type
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"));
+        config.setExposedHeaders(List.of("Authorization")); // Optional but helpful for frontend
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -95,6 +100,7 @@ public class SecurityConfig {
                     "/error",
                     "/favicon.ico"
                 ).permitAll()
+                .requestMatchers("/api/debug/**").permitAll()
 
                 .requestMatchers(HttpMethod.GET,
                     "/api/articles/**",
@@ -103,66 +109,49 @@ public class SecurityConfig {
                     "/api/sizes/**"
                 ).permitAll()
 
-                // GET endpoints - Allow CONTROLEUR to read
-                .requestMatchers(HttpMethod.GET,
-                    "/api/admin/articles/**",
-                    "/api/admin/categories/**",
-                    "/api/admin/colors/**",
-                    "/api/admin/sizes/**",
-                    "/api/admin/variations/**"
-                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR", "CONTROLEUR")
-
-                // POST/PUT/PATCH/DELETE - Only ADMIN_GENERAL and VENDEUR
-                .requestMatchers(HttpMethod.POST,
-                    "/api/admin/articles/**",
-                    "/api/admin/categories/**",
-                    "/api/admin/colors/**",
-                    "/api/admin/sizes/**",
-                    "/api/admin/variations/**"
-                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
-
-                .requestMatchers(HttpMethod.PUT,
-                    "/api/admin/articles/**",
-                    "/api/admin/categories/**",
-                    "/api/admin/colors/**",
-                    "/api/admin/sizes/**",
-                    "/api/admin/variations/**"
-                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
-
-                .requestMatchers(HttpMethod.PATCH,
-                    "/api/admin/articles/**",
-                    "/api/admin/categories/**",
-                    "/api/admin/colors/**",
-                    "/api/admin/sizes/**",
-                    "/api/admin/variations/**"
-                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
-
-                .requestMatchers(HttpMethod.DELETE,
-                    "/api/admin/articles/**",
-                    "/api/admin/categories/**",
-                    "/api/admin/colors/**",
-                    "/api/admin/sizes/**",
-                    "/api/admin/variations/**"
-                ).hasAnyRole("ADMIN_GENERAL", "VENDEUR")
-
-                // Users management - only ADMIN_GENERAL
+                // FIX: Added exact paths (without /**) to ensure Spring Boot 3 correctly maps them
+                // Customers endpoints - Only Administrateur
                 .requestMatchers(
-                    "/api/admin/users/**",
-                    "/api/admin/clients/**"
-                ).hasRole("ADMIN_GENERAL")
+                    "/api/admin/clients", "/api/admin/clients/**",
+                    "/api/admin/users", "/api/admin/users/**"
+                ).hasAuthority("Administrateur")
 
-                // Orders - ADMIN_GENERAL and CONTROLEUR
+                // Workers endpoints - Only Administrateur
                 .requestMatchers(
-                    "/api/admin/orders/**"
-                ).hasAnyRole("ADMIN_GENERAL", "CONTROLEUR")
+                    "/api/admin/workers", "/api/admin/workers/**"
+                ).hasAuthority("Administrateur")
 
-                // Dashboard - only ADMIN_GENERAL
+                // Catalog endpoints - Administrateur and Gestionnaire de catalogue
+                // (Simplified: by removing HttpMethod, this now gracefully covers GET, POST, PUT, PATCH, DELETE)
                 .requestMatchers(
-                    "/api/admin/dashboard/**"
-                ).hasRole("ADMIN_GENERAL")
+                    "/api/admin/articles", "/api/admin/articles/**",
+                    "/api/admin/categories", "/api/admin/categories/**",
+                    "/api/admin/colors", "/api/admin/colors/**",
+                    "/api/admin/sizes", "/api/admin/sizes/**",
+                    "/api/admin/variations", "/api/admin/variations/**"
+                ).hasAnyAuthority("Administrateur", "Gestionnaire de catalogue")
+                // Seller (Vendeur) endpoints - Allow Gestionnaire de catalogue (and optionally Administrateur)
+                .requestMatchers(
+                    "/api/vendeur/**"
+                ).hasAnyAuthority("Gestionnaire de catalogue", "Administrateur")
 
-                // Admin root - allow all admin roles to see the admin panel
-                .requestMatchers("/admin", "/admin/**").hasAnyRole("ADMIN_GENERAL", "VENDEUR", "CONTROLEUR")
+                // Dashboard endpoints - Only Administrateur
+                .requestMatchers(
+                    "/api/admin/dashboard", "/api/admin/dashboard/**",
+                    "/api/admin/recommendation-config" // Secured the endpoint failing with 500 error
+                ).hasAuthority("Administrateur")
+
+                // Orders endpoints - Administrateur and Responsable e-commerce
+                .requestMatchers(
+                    "/api/admin/orders", "/api/admin/orders/**"
+                ).hasAnyAuthority("Administrateur", "Responsable e-commerce")
+
+                // Admin root - allow all admin roles
+                .requestMatchers("/admin", "/admin/**").hasAnyAuthority(
+                    "Administrateur", 
+                    "Gestionnaire de catalogue", 
+                    "Responsable e-commerce"
+                )
 
                 .anyRequest().authenticated()
             )

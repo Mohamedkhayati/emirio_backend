@@ -31,6 +31,9 @@ public interface VariationRepository extends JpaRepository<VariationArticle, Lon
     @EntityGraph(attributePaths = {"article", "article.vendeur", "couleur", "taille", "images"})
     @Query("select v from VariationArticle v where v.id = :id")
     Optional<VariationArticle> findWithArticleAndVendeurById(@Param("id") Long id);
+ // Find variations of articles owned by a seller
+    @Query("select v from VariationArticle v where v.article.vendeur.id = :vendeurId order by v.id asc")
+    List<VariationArticle> findByVendeurId(@Param("vendeurId") Long vendeurId);
 
     boolean existsByArticleIdAndCouleurIdAndTailleId(Long articleId, Long couleurId, Long tailleId);
 
@@ -39,4 +42,9 @@ public interface VariationRepository extends JpaRepository<VariationArticle, Lon
     boolean existsByArticleIdAndCouleurIdAndTailleIsNull(Long articleId, Long couleurId);
 
     boolean existsByArticleIdAndCouleurIdAndTailleIsNullAndIdNot(Long articleId, Long couleurId, Long id);
+
+    // Vendor filtering – variations belonging to a vendor's articles
+    @EntityGraph(attributePaths = {"article", "couleur", "taille", "images"})
+    @Query("select v from VariationArticle v where v.article.vendeur.id = :vendeurId order by v.id asc")
+    List<VariationArticle> findByArticleVendeurId(@Param("vendeurId") Long vendeurId);
 }

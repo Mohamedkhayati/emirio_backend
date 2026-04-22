@@ -17,10 +17,10 @@ public class RoleSeeder {
     CommandLineRunner seedRoles(RoleRepository roleRepository) {
         return args -> {
             List<String> roleNames = List.of(
-                    "ADMIN_GENERAL",
-                    "USER",
-                    "VENDEUR",
-                    "CONTROLEUR"
+                    "Administrateur",
+                    "Client",
+                    "Gestionnaire de catalogue",
+                    "Responsable e-commerce"
             );
 
             for (String roleName : roleNames) {

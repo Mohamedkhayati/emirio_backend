@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -31,12 +33,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
 
-        return HttpMethod.OPTIONS.matches(request.getMethod())
-                || path.startsWith("/api/auth/")
+        // 1. Explicitly ignore ALL OPTIONS requests (Pre-flight CORS)
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+
+        // 2. Ignore public paths
+        return path.startsWith("/api/auth/")
                 || path.startsWith("/oauth2/")
                 || path.startsWith("/login/")
                 || path.startsWith("/error")
-                || path.equals("/favicon.ico");
+                || path.equals("/favicon.ico")
+                || path.startsWith("/api/catalog/variations/");
     }
 
     @Override
@@ -65,7 +73,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             System.out.println("✅ Token extracted, length: " + token.length());
             
             String email = jwt.getSubject(token);
+            String role = jwt.getRole(token);
+            
             System.out.println("📧 Email from token: " + email);
+            System.out.println("👤 Role from token: " + role);
 
             if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 System.out.println("🔄 Loading UserDetails for: " + email);
@@ -73,20 +84,35 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 
                 System.out.println("✅ UserDetails loaded:");
                 System.out.println("   - Username: " + userDetails.getUsername());
-                System.out.println("   - Authorities: " + userDetails.getAuthorities());
-                System.out.println("   - Password: " + (userDetails.getPassword() != null ? "present" : "null"));
+                System.out.println("   - Authorities from DB: " + userDetails.getAuthorities());
                 
                 boolean valid = jwt.isTokenValid(token, userDetails.getUsername());
                 System.out.println("🔐 Token valid: " + valid);
                 
                 if (valid) {
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    userDetails,
-                                    null,
-                                    userDetails.getAuthorities()
-                            );
-                    
+                    // Use role from token OR from UserDetails
+                	 String dbRole = userDetails.getAuthorities().stream()
+                             .findFirst()
+                             .map(auth -> auth.getAuthority().replace("ROLE_", ""))
+                             .orElse("USER");
+                	 
+                	 String finalRole = (role != null && !role.isEmpty() && !role.equals("USER")) ? role : dbRole;
+
+                     System.out.println("🎭 Final role being set: " + finalRole);
+ 
+                    // Create authorities with the role (NO ROLE_ prefix)
+                     List<SimpleGrantedAuthority> authorities = List.of(
+                             new SimpleGrantedAuthority(finalRole)
+                     );
+                     UsernamePasswordAuthenticationToken authentication =
+                             new UsernamePasswordAuthenticationToken(
+                                     userDetails,
+                                     null,
+                                     authorities 
+                             );
+
+                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
+                     SecurityContextHolder.getContext().setAuthentication(authentication);
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                     

@@ -1,3 +1,4 @@
+// com/emirio/admin/CurrentActorService.java
 package com.emirio.admin;
 
 import com.emirio.user.User;
@@ -30,12 +31,11 @@ public class CurrentActorService {
             .map(a -> a.getAuthority())
             .collect(Collectors.toSet());
 
+        // ✅ Updated to strictly check against your exact new role names
         boolean allowed =
-            authorities.contains("ROLE_ADMIN_GENERAL")
-            || authorities.contains("ROLE_GENERAL_ADMIN")
-            || authorities.contains("ADMIN_GENERAL")
-            || authorities.contains("GENERAL_ADMIN")
-            || authorities.contains("ROLE_VENDEUR");
+            authorities.contains("Administrateur")
+            || authorities.contains("Gestionnaire de catalogue")
+            || authorities.contains("Responsable e-commerce");
 
         if (!allowed) {
             throw new ResponseStatusException(
