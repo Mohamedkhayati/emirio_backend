@@ -54,13 +54,9 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of("http://localhost:5173", "http://127.0.0.1:5173"));
-        
-        // Explicitly add OPTIONS here
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        
-        // Must include Authorization and Content-Type
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"));
-        config.setExposedHeaders(List.of("Authorization")); // Optional but helpful for frontend
+        config.setExposedHeaders(List.of("Authorization"));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -109,7 +105,6 @@ public class SecurityConfig {
                     "/api/sizes/**"
                 ).permitAll()
 
-                // FIX: Added exact paths (without /**) to ensure Spring Boot 3 correctly maps them
                 // Customers endpoints - Only Administrateur
                 .requestMatchers(
                     "/api/admin/clients", "/api/admin/clients/**",
@@ -122,7 +117,6 @@ public class SecurityConfig {
                 ).hasAuthority("Administrateur")
 
                 // Catalog endpoints - Administrateur and Gestionnaire de catalogue
-                // (Simplified: by removing HttpMethod, this now gracefully covers GET, POST, PUT, PATCH, DELETE)
                 .requestMatchers(
                     "/api/admin/articles", "/api/admin/articles/**",
                     "/api/admin/categories", "/api/admin/categories/**",
@@ -130,7 +124,8 @@ public class SecurityConfig {
                     "/api/admin/sizes", "/api/admin/sizes/**",
                     "/api/admin/variations", "/api/admin/variations/**"
                 ).hasAnyAuthority("Administrateur", "Gestionnaire de catalogue")
-                // Seller (Vendeur) endpoints - Allow Gestionnaire de catalogue (and optionally Administrateur)
+                
+                // Seller (Vendeur) endpoints
                 .requestMatchers(
                     "/api/vendeur/**"
                 ).hasAnyAuthority("Gestionnaire de catalogue", "Administrateur")
@@ -138,7 +133,7 @@ public class SecurityConfig {
                 // Dashboard endpoints - Only Administrateur
                 .requestMatchers(
                     "/api/admin/dashboard", "/api/admin/dashboard/**",
-                    "/api/admin/recommendation-config" // Secured the endpoint failing with 500 error
+                    "/api/admin/recommendation-config"
                 ).hasAuthority("Administrateur")
 
                 // Orders endpoints - Administrateur and Responsable e-commerce
@@ -146,7 +141,21 @@ public class SecurityConfig {
                     "/api/admin/orders", "/api/admin/orders/**"
                 ).hasAnyAuthority("Administrateur", "Responsable e-commerce")
 
-                // Admin root - allow all admin roles
+                // ========================
+                // RECLAMATION ENDPOINTS – FIXED
+                // ========================
+                // 1. Client-only actions
+                .requestMatchers(HttpMethod.POST, "/api/reclamations").hasAuthority("Client")
+                .requestMatchers(HttpMethod.GET, "/api/reclamations/my").hasAuthority("Client")
+                .requestMatchers(HttpMethod.POST, "/api/reclamations/*/client-messages").hasAuthority("Client")
+                
+                // 2. Fetch a single reclamation – allow any authenticated user (controller checks ownership)
+                .requestMatchers(HttpMethod.GET, "/api/reclamations/*").authenticated()
+                
+                // 3. All other reclamation endpoints (admin only)
+                .requestMatchers("/api/reclamations/**").hasAnyAuthority("Administrateur", "Responsable e-commerce")
+
+                // Admin root
                 .requestMatchers("/admin", "/admin/**").hasAnyAuthority(
                     "Administrateur", 
                     "Gestionnaire de catalogue", 

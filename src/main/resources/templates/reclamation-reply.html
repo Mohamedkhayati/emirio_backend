@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Réclamation</title>
+</head>
+<body>
+    <h2>Réponse à votre réclamation #<span th:text="${reclamationId}"></span></h2>
+    <p><strong>Sujet :</strong> <span th:text="${reclamationSubject}"></span></p>
+    <p><strong>Notre réponse :</strong></p>
+    <div th:utext="${replyContent}"></div>
+    <hr>
+    <p>Vous pouvez consulter l'historique complet dans votre espace client.</p>
+    <p>Cordialement,<br>L'équipe support</p>
+</body>
+</html>
