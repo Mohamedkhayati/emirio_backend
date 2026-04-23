@@ -56,6 +56,22 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-client</artifactId>
         </dependency>
+<!-- Apache PDFBox – to read the PDF file -->
+<dependency>
+    <groupId>org.apache.pdfbox</groupId>
+    <artifactId>pdfbox</artifactId>
+    <version>3.0.3</version>
+</dependency>
+
+<!-- For better string similarity (optional, used in fuzzy product search) -->
+<dependency>
+    <groupId>org.apache.commons</groupId>
+    <artifactId>commons-text</artifactId>
+    <version>1.12.0</version>
+</dependency>
+
+<!-- Spring Boot Starter Web (already present) -->
+<!-- Spring Boot Starter Data JPA (already present) -->
 
         <dependency>
             <groupId>com.mysql</groupId>

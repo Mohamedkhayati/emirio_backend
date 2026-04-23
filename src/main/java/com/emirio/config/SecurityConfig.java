@@ -154,7 +154,7 @@ public class SecurityConfig {
                 
                 // 3. All other reclamation endpoints (admin only)
                 .requestMatchers("/api/reclamations/**").hasAnyAuthority("Administrateur", "Responsable e-commerce")
-
+                .requestMatchers("/api/chat/send", "/api/chat/history").authenticated()
                 // Admin root
                 .requestMatchers("/admin", "/admin/**").hasAnyAuthority(
                     "Administrateur", 
