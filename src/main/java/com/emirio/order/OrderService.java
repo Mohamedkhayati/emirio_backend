@@ -68,18 +68,19 @@ public class OrderService {
         commande.setSignedAt(isBlank(req.getSignatureDataUrl()) ? null : LocalDateTime.now());
         commande.setArchived(false);
 
-        // FAKE PAYMENT HANDLER – SIMULE
+        // All orders start with EN_ATTENTE
+        commande.setStatutCommande(StatutCommande.EN_ATTENTE);
+
+        // Set payment status according to payment method
         if (commande.getModePaiement() == ModePaiement.SIMULE) {
-            commande.setStatutPaiement(StatutPaiement.PAYE);
-            commande.setStatutCommande(StatutCommande.CONFIRMEE);
-            commande.setPaymentInstructions("✅ Paiement simulé (PFE). Aucune action requise.");
+            commande.setStatutPaiement(StatutPaiement.ACCEPTE);
+            commande.setPaymentInstructions("✅ Paiement simulé (PFE). L'administrateur doit confirmer la commande.");
+        } else if (commande.getModePaiement() == ModePaiement.LIVRAISON) {
+            commande.setStatutPaiement(StatutPaiement.NON_REQUIS);
+            commande.setPaymentInstructions("Paiement à la livraison.");
         } else {
-            commande.setStatutCommande(StatutCommande.EN_ATTENTE);
-            commande.setStatutPaiement(
-                commande.getModePaiement() == ModePaiement.LIVRAISON
-                    ? StatutPaiement.NON_REQUIS
-                    : StatutPaiement.EN_ATTENTE_VERIFICATION
-            );
+            commande.setStatutPaiement(StatutPaiement.EN_ATTENTE_VERIFICATION);
+            commande.setPaymentInstructions(buildPaymentInstructions(commande));
         }
 
         double total = 0.0;
@@ -122,21 +123,17 @@ public class OrderService {
 
         commande.setTotal(total);
 
-        if (commande.getModePaiement() != ModePaiement.SIMULE) {
-            commande.setPaymentInstructions(buildPaymentInstructions(commande));
-        }
-
         Commande saved = commandeRepository.saveAndFlush(commande);
 
-        // 👇 CREATE PAYMENT RECORD FOR SIMULE (only after saved is defined)
+        // Create payment record for SIMULE (if needed)
         if (saved.getModePaiement() == ModePaiement.SIMULE) {
             Paiement paiement = new Paiement(
                 saved,
                 saved.getTotal(),
                 saved.getModePaiement(),
-                StatutPaiement.PAYE,
+                StatutPaiement.ACCEPTE,
                 "SIMULE_" + saved.getReferenceCommande(),
-                "Paiement simulé (PFE) – automatiquement accepté"
+                "Paiement simulé – accepté automatiquement"
             );
             paiementRepository.save(paiement);
         }
@@ -146,7 +143,7 @@ public class OrderService {
             user,
             TypeActionCommande.CREATION_COMMANDE,
             null,
-            saved.getStatutCommande() != null ? saved.getStatutCommande().name() : null,
+            saved.getStatutCommande().name(),
             "Commande créée depuis le checkout"
         );
 

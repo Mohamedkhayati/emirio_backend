@@ -5,6 +5,7 @@ import com.emirio.catalog.Article;
 import com.emirio.catalog.Category;
 import com.emirio.catalog.repo.ArticleRepository;
 import com.emirio.catalog.repo.CategoryRepository;
+import com.emirio.notification.EmailService;
 import com.emirio.security.CurrentUserService;
 import com.emirio.user.User;
 import jakarta.validation.Valid;
@@ -34,17 +35,20 @@ public class AdminArticleController {
     private final CategoryRepository categories;
     private final CurrentUserService currentUserService;
     private final CatalogHistoryService catalogHistoryService;
+    private final EmailService emailService;
 
     public AdminArticleController(
         ArticleRepository articles,
         CategoryRepository categories,
         CurrentUserService currentUserService,
-        CatalogHistoryService catalogHistoryService
+        CatalogHistoryService catalogHistoryService,
+        EmailService emailService
     ) {
         this.articles = articles;
         this.categories = categories;
         this.currentUserService = currentUserService;
         this.catalogHistoryService = catalogHistoryService;
+        this.emailService = emailService;
     }
 
     @GetMapping
@@ -75,6 +79,10 @@ public class AdminArticleController {
 
         User actor = currentUserService.requireCurrentUser();
         catalogHistoryService.articleCreated(saved, actor);
+
+        // Send email notification to all active users
+        String imageUrl = saved.getImageData1() != null ? "/api/articles/" + saved.getId() + "/image/1" : null;
+        emailService.sendNewArticleNotification(saved.getNom(), saved.getDescription(), imageUrl);
 
         return ArticleDto.from(saved);
     }

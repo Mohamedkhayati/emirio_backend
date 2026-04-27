@@ -17,6 +17,16 @@
     <version>0.0.1-SNAPSHOT</version>
     <name>emirio-api</name>
     <description>Emirio API</description>
+    <repositories>
+    <repository>
+        <id>spring-milestones</id>
+        <name>Spring Milestones</name>
+        <url>https://repo.spring.io/milestone</url>
+        <snapshots>
+            <enabled>false</enabled>
+        </snapshots>
+    </repository>
+</repositories>
 
     <properties>
         <java.version>21</java.version>
@@ -61,6 +71,12 @@
     <groupId>org.apache.pdfbox</groupId>
     <artifactId>pdfbox</artifactId>
     <version>3.0.3</version>
+</dependency>
+<!-- Spring AI Ollama -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-ollama-spring-boot-starter</artifactId>
+    <version>1.0.0-M6</version>
 </dependency>
 
 <!-- For better string similarity (optional, used in fuzzy product search) -->

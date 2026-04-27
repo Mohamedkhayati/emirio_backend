@@ -38,7 +38,6 @@ public class ArticleVendeurDto {
         dto.setMarque(article.getMarque());
         dto.setMatiere(article.getMatiere());
         dto.setSku(article.getSku());
-        dto.setImageUrl(article.getImageData1() != null ? "/api/articles/" + article.getId() + "/image/1" : null);
         dto.setSalePrice(article.getSalePrice());
         dto.setSaleStartAt(article.getSaleStartAt());
         dto.setSaleEndAt(article.getSaleEndAt());

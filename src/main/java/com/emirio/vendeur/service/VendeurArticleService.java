@@ -2,6 +2,7 @@ package com.emirio.vendeur.service;
 
 import com.emirio.catalog.*;
 import com.emirio.catalog.repo.*;
+import com.emirio.notification.EmailService;      // <-- added
 import com.emirio.security.CurrentUserService;
 import com.emirio.user.User;
 import com.emirio.vendeur.dto.ArticleVendeurDto;
@@ -30,6 +31,7 @@ public class VendeurArticleService {
     private final ColorRepository colorRepository;
     private final SizeRepository sizeRepository;
     private final CurrentUserService currentUserService;
+    private final EmailService emailService;      // <-- injected
 
     private User currentVendeur() {
         return currentUserService.requireCurrentUser();
@@ -86,6 +88,11 @@ public class VendeurArticleService {
         fillArticle(article, req, category, vendeur);
         applyImages(article, image1, image2, image3, image4);
         Article saved = articleRepository.save(article);
+
+        // Send email notification to all active users
+        String imageUrl = saved.getImageData1() != null ? "/api/articles/" + saved.getId() + "/image/1" : null;
+        emailService.sendNewArticleNotification(saved.getNom(), saved.getDescription(), imageUrl);
+
         return getMyArticle(saved.getId());
     }
 
@@ -273,20 +280,13 @@ public class VendeurArticleService {
 
     /**
      * Determines if an article is an accessory (no sizes, only stock per color).
-     * Checks:
-     * - Category's mainCategory enum (if available)
-     * - Category name (case-insensitive) for keywords "accessoire", "accessoires", "accessory", "sac a main", "sac à main", "pochette de soirée"
      */
     private boolean isAccessory(Article article) {
         if (article == null || article.getCategorie() == null) return false;
         Category cat = article.getCategorie();
-
-        // Check mainCategory enum (if your Category entity has it)
         if (cat.getMainCategory() != null && cat.getMainCategory() == MainCategory.ACCESSOIRES) {
             return true;
         }
-
-        // Fallback: check category name (case-insensitive, partial match)
         String catName = cat.getNom().trim().toLowerCase();
         return catName.contains("accessoire") ||
                catName.contains("accessoires") ||
