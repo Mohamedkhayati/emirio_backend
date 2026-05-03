@@ -3,7 +3,6 @@ package com.emirio.order.repo;
 import com.emirio.order.LigneCommande;
 import com.emirio.user.User;
 
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,10 +13,10 @@ public interface LigneCommandeRepository extends JpaRepository<LigneCommande, Lo
 
     @Query("SELECT lc FROM LigneCommande lc JOIN FETCH lc.commande WHERE lc.commande.client = :user")
     List<LigneCommande> findByCommandeClient(@Param("user") User user);
- // Find order lines for a given order that belong to the seller's articles
+    
     @Query("select l from LigneCommande l where l.commande.id = :orderId and l.articleId in (select a.id from Article a where a.vendeur.id = :vendeurId)")
     List<LigneCommande> findVendeurLinesByOrderId(@Param("orderId") Long orderId, @Param("vendeurId") Long vendeurId);
- // In LigneCommandeRepository.java
+    
     @Query("select sum(l.sousTotal) from LigneCommande l where l.articleId in (select a.id from Article a where a.vendeur.id = :vendeurId)")
     Double sumSousTotalByVendeurId(@Param("vendeurId") Long vendeurId);
 
@@ -32,4 +31,11 @@ public interface LigneCommandeRepository extends JpaRepository<LigneCommande, Lo
 
     @Query("select c.id, c.nom, sum(l.quantite), sum(l.sousTotal) from LigneCommande l join Article a on l.articleId = a.id join a.categorie c where a.vendeur.id = :vendeurId group by c.id, c.nom order by sum(l.quantite) desc")
     List<Object[]> findTopCategoriesByVendeurId(@Param("vendeurId") Long vendeurId);
+
+    // NEW: Sum revenue by category name for radar chart
+    @Query("SELECT SUM(l.prixUnitaire * l.quantite) FROM LigneCommande l " +
+           "JOIN Article a ON l.articleId = a.id " +
+           "JOIN a.categorie c " +
+           "WHERE LOWER(c.nom) = LOWER(:categoryName)")
+    Double sumRevenueByCategoryName(@Param("categoryName") String categoryName);
 }

@@ -17,10 +17,35 @@ public class CatalogHistoryController {
     private final CatalogHistoryRepository historyRepository;
     private final CurrentActorService currentActorService;
 
-    @GetMapping("/catalog/history")
-    public List<HistoryDto> allHistory() {
+    // Global history - shows ALL catalog activities (articles + variations)
+    @GetMapping("/catalog/history/all")
+    public List<HistoryDto> getAllHistory(
+        @RequestParam(required = false) Integer limit,
+        @RequestParam(required = false) String action,
+        @RequestParam(required = false) String targetType
+    ) {
         currentActorService.requireGeneralAdmin();
-        return historyRepository.findAllByOrderByActionAtDesc().stream()
+        
+        List<CatalogHistory> histories;
+        
+        if (action != null && targetType != null) {
+            histories = historyRepository.findByActionAndTargetTypeOrderByActionAtDesc(
+                CatalogAction.valueOf(action), 
+                CatalogTargetType.valueOf(targetType)
+            );
+        } else if (action != null) {
+            histories = historyRepository.findByActionOrderByActionAtDesc(CatalogAction.valueOf(action));
+        } else if (targetType != null) {
+            histories = historyRepository.findByTargetTypeOrderByActionAtDesc(CatalogTargetType.valueOf(targetType));
+        } else {
+            histories = historyRepository.findAllByOrderByActionAtDesc();
+        }
+        
+        if (limit != null && limit > 0 && histories.size() > limit) {
+            histories = histories.subList(0, limit);
+        }
+        
+        return histories.stream()
             .map(this::toDto)
             .toList();
     }
@@ -64,7 +89,6 @@ public class CatalogHistoryController {
 
     private String toActionLabel(CatalogAction action) {
         if (action == null) return null;
-
         return switch (action) {
             case CREATE -> "Created";
             case UPDATE -> "Edited";

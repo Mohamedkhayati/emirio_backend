@@ -50,6 +50,7 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
         order by a.id asc
     """)
     List<Article> findOldArticles();
+    
 
     @EntityGraph(attributePaths = "categorie")
     @Query("""

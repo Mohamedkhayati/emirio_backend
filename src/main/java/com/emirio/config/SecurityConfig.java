@@ -117,13 +117,14 @@ public class SecurityConfig {
                 ).hasAuthority("Administrateur")
 
                 // Catalog endpoints - Administrateur and Gestionnaire de catalogue
+             // Catalog endpoints - Administrateur, Gestionnaire de catalogue, AND Responsable e-commerce
                 .requestMatchers(
                     "/api/admin/articles", "/api/admin/articles/**",
                     "/api/admin/categories", "/api/admin/categories/**",
                     "/api/admin/colors", "/api/admin/colors/**",
                     "/api/admin/sizes", "/api/admin/sizes/**",
                     "/api/admin/variations", "/api/admin/variations/**"
-                ).hasAnyAuthority("Administrateur", "Gestionnaire de catalogue")
+                ).hasAnyAuthority("Administrateur", "Gestionnaire de catalogue", "Responsable e-commerce")
                 
                 // Seller (Vendeur) endpoints
                 .requestMatchers(

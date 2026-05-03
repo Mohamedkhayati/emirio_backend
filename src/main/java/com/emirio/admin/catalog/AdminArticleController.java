@@ -3,18 +3,24 @@ package com.emirio.admin.catalog;
 import com.emirio.admin.catalog.history.CatalogHistoryService;
 import com.emirio.catalog.Article;
 import com.emirio.catalog.Category;
+import com.emirio.catalog.VariationArticle;
 import com.emirio.catalog.repo.ArticleRepository;
 import com.emirio.catalog.repo.CategoryRepository;
+import com.emirio.catalog.repo.VariationRepository;
 import com.emirio.notification.EmailService;
 import com.emirio.security.CurrentUserService;
 import com.emirio.user.User;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -33,19 +39,25 @@ public class AdminArticleController {
 
     private final ArticleRepository articles;
     private final CategoryRepository categories;
+    private final VariationRepository variationRepository;
     private final CurrentUserService currentUserService;
     private final CatalogHistoryService catalogHistoryService;
     private final EmailService emailService;
+    
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public AdminArticleController(
         ArticleRepository articles,
         CategoryRepository categories,
+        VariationRepository variationRepository,
         CurrentUserService currentUserService,
         CatalogHistoryService catalogHistoryService,
         EmailService emailService
     ) {
         this.articles = articles;
         this.categories = categories;
+        this.variationRepository = variationRepository;
         this.currentUserService = currentUserService;
         this.catalogHistoryService = catalogHistoryService;
         this.emailService = emailService;
@@ -80,7 +92,6 @@ public class AdminArticleController {
         User actor = currentUserService.requireCurrentUser();
         catalogHistoryService.articleCreated(saved, actor);
 
-        // Send email notification to all active users
         String imageUrl = saved.getImageData1() != null ? "/api/articles/" + saved.getId() + "/image/1" : null;
         emailService.sendNewArticleNotification(saved.getNom(), saved.getDescription(), imageUrl);
 
@@ -111,13 +122,49 @@ public class AdminArticleController {
     }
 
     @DeleteMapping("/{id}")
+    @Transactional
     public void delete(@PathVariable Long id) {
         Article article = findArticle(id);
-
-        User actor = currentUserService.requireCurrentUser();
-        catalogHistoryService.articleDeleted(article, actor);
-
-        articles.delete(article);
+        
+        try {
+            User actor = currentUserService.requireCurrentUser();
+            
+            // 1. Delete user recommendations first
+            entityManager.createNativeQuery("DELETE FROM user_recommendation WHERE article_id = ?")
+                .setParameter(1, id)
+                .executeUpdate();
+            
+            // 2. Delete variation images
+            entityManager.createNativeQuery("DELETE vi FROM variation_image vi " +
+                                            "INNER JOIN variation_article v ON vi.variation_id = v.id " +
+                                            "WHERE v.article_id = ?")
+                .setParameter(1, id)
+                .executeUpdate();
+            
+            // 3. Delete variations
+            entityManager.createNativeQuery("DELETE FROM variation_article WHERE article_id = ?")
+                .setParameter(1, id)
+                .executeUpdate();
+            
+            // 4. Delete product views
+            entityManager.createNativeQuery("DELETE FROM product_view WHERE article_id = ?")
+                .setParameter(1, id)
+                .executeUpdate();
+            
+            // 5. Record article deletion history
+            catalogHistoryService.articleDeleted(article, actor);
+            
+            // 6. Finally delete the article
+            entityManager.createNativeQuery("DELETE FROM article WHERE id = ?")
+                .setParameter(1, id)
+                .executeUpdate();
+            
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                HttpStatus.INTERNAL_SERVER_ERROR, 
+                "Failed to delete article: " + e.getMessage()
+            );
+        }
     }
 
     private Article findArticle(Long id) {

@@ -11,7 +11,6 @@ import com.emirio.catalog.repo.SizeRepository;
 import com.emirio.catalog.repo.VariationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-// 🔴 THE IMPORTANT FIX: We use Spring's Transactional instead of jakarta
 import org.springframework.transaction.annotation.Transactional; 
 
 import jakarta.validation.constraints.Min;
@@ -263,9 +262,13 @@ public class AdminVariationController {
         if (article == null || article.getCategorie() == null || article.getCategorie().getNom() == null) {
             return false;
         }
-
         String n = article.getCategorie().getNom().trim().toLowerCase();
-        return n.equals("accessoire") || n.equals("accessory") || n.equals("accessories");
+        return n.equals("accessoire") || 
+               n.equals("accessory") || 
+               n.equals("accessories") ||
+               n.equals("sac a main") ||
+               n.equals("sac à main") ||
+               n.equals("pochette de soirée");
     }
 
     private MediaType parseMediaType(String raw, MediaType fallback) {
