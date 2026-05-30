@@ -16,11 +16,14 @@ import com.emirio.order.repo.PaiementRepository;
 import com.emirio.user.User;
 import com.emirio.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.springframework.http.HttpStatus.*;
@@ -28,6 +31,8 @@ import static org.springframework.http.HttpStatus.*;
 @Service
 @RequiredArgsConstructor
 public class OrderService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
     private final CommandeRepository commandeRepository;
     private final PanierRepository panierRepository;
@@ -41,14 +46,13 @@ public class OrderService {
     @Transactional
     public OrderDetailsDto checkout(String email, CheckoutRequest req) {
         User user = currentUser(email);
-
         Panier panier = panierRepository.findByClientId(user.getId())
-            .orElseThrow(() -> new ResponseStatusException(BAD_REQUEST, "Cart is empty"));
+                .orElseThrow(() -> new ResponseStatusException(BAD_REQUEST, "Cart is empty"));
 
-        if (panier.getLignes() == null || panier.getLignes().isEmpty()) {
+        if (panier.getLignes() == null || panier.getLignes().isEmpty())
             throw new ResponseStatusException(BAD_REQUEST, "Cart is empty");
-        }
 
+        // 1. Build Commande object (without saving yet)
         Commande commande = new Commande();
         commande.setClient(user);
         commande.setNomClient(isBlank(req.getNom()) ? user.getNom() : req.getNom());
@@ -67,11 +71,7 @@ public class OrderService {
         commande.setSignatureDataUrl(blankToNull(req.getSignatureDataUrl()));
         commande.setSignedAt(isBlank(req.getSignatureDataUrl()) ? null : LocalDateTime.now());
         commande.setArchived(false);
-
-        // All orders start with EN_ATTENTE
         commande.setStatutCommande(StatutCommande.EN_ATTENTE);
-
-        // Set payment status according to payment method
         if (commande.getModePaiement() == ModePaiement.SIMULE) {
             commande.setStatutPaiement(StatutPaiement.ACCEPTE);
             commande.setPaymentInstructions("✅ Paiement simulé (PFE). L'administrateur doit confirmer la commande.");
@@ -84,26 +84,23 @@ public class OrderService {
         }
 
         double total = 0.0;
+        List<VariationArticle> variationsToUpdate = new ArrayList<>();
 
         for (LignePanier lignePanier : panier.getLignes()) {
-            if (lignePanier.getVariationId() == null) {
+            if (lignePanier.getVariationId() == null)
                 throw new ResponseStatusException(BAD_REQUEST, "Missing variation for one cart line");
-            }
 
             int requestedQty = Math.max(1, lignePanier.getQuantite());
-
             VariationArticle variation = variationRepository.findById(lignePanier.getVariationId())
-                .orElseThrow(() -> new ResponseStatusException(BAD_REQUEST,
-                    "Variation not found: " + lignePanier.getVariationId()));
+                    .orElseThrow(() -> new ResponseStatusException(BAD_REQUEST, "Variation not found"));
 
             Integer stockValue = variation.getQuantiteStock();
             int currentStock = stockValue == null ? 0 : stockValue;
+            if (currentStock < requestedQty)
+                throw new ResponseStatusException(BAD_REQUEST, "Insufficient stock for " + lignePanier.getNomProduit());
 
-            if (currentStock < requestedQty) {
-                throw new ResponseStatusException(BAD_REQUEST,
-                    "Insufficient stock for " + lignePanier.getNomProduit());
-            }
-
+            // Defer stock update until after all validations (but we apply now; transaction ensures rollback if any later failure)
+            variationsToUpdate.add(variation);
             variation.setQuantiteStock(currentStock - requestedQty);
 
             LigneCommande ligneCommande = new LigneCommande();
@@ -116,51 +113,41 @@ public class OrderService {
             ligneCommande.setQuantite(requestedQty);
             ligneCommande.setPrixUnitaire(lignePanier.getPrixUnitaire());
             ligneCommande.setSousTotal(lignePanier.getPrixUnitaire() * requestedQty);
-
             total += ligneCommande.getSousTotal();
             commande.addLigne(ligneCommande);
         }
-
         commande.setTotal(total);
 
-        Commande saved = commandeRepository.saveAndFlush(commande);
+        // 2. Save order (stock already updated in variations, but they are managed)
+        Commande saved = commandeRepository.save(commande);
 
-        // Create payment record for SIMULE (if needed)
+        // 3. Create payment record for SIMULE
         if (saved.getModePaiement() == ModePaiement.SIMULE) {
-            Paiement paiement = new Paiement(
-                saved,
-                saved.getTotal(),
-                saved.getModePaiement(),
-                StatutPaiement.ACCEPTE,
-                "SIMULE_" + saved.getReferenceCommande(),
-                "Paiement simulé – accepté automatiquement"
-            );
+            Paiement paiement = new Paiement(saved, saved.getTotal(), saved.getModePaiement(),
+                    StatutPaiement.ACCEPTE, "SIMULE_" + saved.getReferenceCommande(), "Paiement simulé");
             paiementRepository.save(paiement);
         }
 
-        logAction(
-            saved,
-            user,
-            TypeActionCommande.CREATION_COMMANDE,
-            null,
-            saved.getStatutCommande().name(),
-            "Commande créée depuis le checkout"
-        );
+        // 4. Log action
+        logAction(saved, user, TypeActionCommande.CREATION_COMMANDE, null,
+                saved.getStatutCommande().name(), "Commande créée depuis le checkout");
 
-        if (isBlank(saved.getInvoiceNumber())) {
+        // 5. Generate invoice
+        if (isBlank(saved.getInvoiceNumber()))
             saved.setInvoiceNumber(saved.getReferenceCommande());
-        }
-
         saved.setInvoiceUrl(invoiceService.generateProformaInvoice(saved));
         saved = commandeRepository.save(saved);
 
+        // 6. Clear cart
         panier.clearLignes();
         panier.setDateMaj(LocalDateTime.now());
         panierRepository.save(panier);
 
+        // 7. Send email (errors logged but do not rollback)
         try {
             orderMailService.sendInvoiceEmail(saved);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.error("Failed to send invoice email for order {}: {}", saved.getId(), e.getMessage(), e);
         }
 
         return toDetailsDto(saved);
@@ -170,8 +157,8 @@ public class OrderService {
     public List<OrderSummaryDto> myOrders(String email, Boolean archived) {
         User user = currentUser(email);
         List<Commande> commandes = archived == null
-            ? commandeRepository.findByClientIdOrderByDateCommandeDesc(user.getId())
-            : commandeRepository.findByClientIdAndArchivedOrderByDateCommandeDesc(user.getId(), archived);
+                ? commandeRepository.findByClientIdOrderByDateCommandeDesc(user.getId())
+                : commandeRepository.findByClientIdAndArchivedOrderByDateCommandeDesc(user.getId(), archived);
         return commandes.stream().map(this::toSummaryDto).toList();
     }
 
@@ -179,7 +166,7 @@ public class OrderService {
     public OrderDetailsDto details(String email, Long id) {
         User user = currentUser(email);
         Commande commande = commandeRepository.findByIdAndClientId(id, user.getId())
-            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Order not found"));
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Order not found"));
         return toDetailsDto(commande);
     }
 
@@ -187,7 +174,7 @@ public class OrderService {
     public OrderDetailsDto cancel(String email, Long id) {
         User user = currentUser(email);
         Commande commande = commandeRepository.findByIdAndClientId(id, user.getId())
-            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Order not found"));
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Order not found"));
 
         if (commande.getStatutCommande() != StatutCommande.EN_ATTENTE) {
             throw new ResponseStatusException(BAD_REQUEST, "This order can no longer be cancelled");
@@ -198,8 +185,8 @@ public class OrderService {
         Commande saved = commandeRepository.save(commande);
 
         logAction(saved, user, TypeActionCommande.ANNULATION_COMMANDE,
-                  ancienStatut, saved.getStatutCommande().name(),
-                  "Commande annulée par le client");
+                ancienStatut, saved.getStatutCommande().name(),
+                "Commande annulée par le client");
         return toDetailsDto(saved);
     }
 
@@ -207,11 +194,11 @@ public class OrderService {
     public OrderDetailsDto archive(String email, Long id) {
         User user = currentUser(email);
         Commande commande = commandeRepository.findByIdAndClientId(id, user.getId())
-            .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Order not found"));
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Order not found"));
         commande.setArchived(true);
         Commande saved = commandeRepository.save(commande);
         logAction(saved, user, TypeActionCommande.ARCHIVAGE_COMMANDE,
-                  null, null, "Commande archivée par le client");
+                null, null, "Commande archivée par le client");
         return toDetailsDto(saved);
     }
 
@@ -233,7 +220,7 @@ public class OrderService {
         if (email == null || email.isBlank())
             throw new ResponseStatusException(UNAUTHORIZED, "Unauthorized");
         return userRepository.findByEmail(email)
-            .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Unauthorized"));
+                .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Unauthorized"));
     }
 
     private ModePaiement parseModePaiement(String value) {
@@ -267,8 +254,13 @@ public class OrderService {
         return digits.length() <= 4 ? digits : digits.substring(digits.length() - 4);
     }
 
-    private boolean isBlank(String v) { return v == null || v.isBlank(); }
-    private String blankToNull(String v) { return isBlank(v) ? null : v.trim(); }
+    private boolean isBlank(String v) {
+        return v == null || v.isBlank();
+    }
+
+    private String blankToNull(String v) {
+        return isBlank(v) ? null : v.trim();
+    }
 
     private OrderSummaryDto toSummaryDto(Commande c) {
         OrderSummaryDto d = new OrderSummaryDto();

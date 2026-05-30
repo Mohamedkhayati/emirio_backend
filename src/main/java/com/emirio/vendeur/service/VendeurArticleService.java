@@ -240,7 +240,7 @@ public class VendeurArticleService {
         article.setSalePrice(req.getSalePrice());
         article.setSaleStartAt(req.getSaleStartAt());
         article.setSaleEndAt(req.getSaleEndAt());
-        article.setVendeur(vendeur);
+        article.setVendeur(vendeur);   // ← THIS LINE IS CRITICAL
     }
 
     private void applyImages(Article article, MultipartFile... images) throws IOException {

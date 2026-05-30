@@ -10,6 +10,13 @@ import java.util.List;
 import java.util.Optional;
 
 public interface VariationRepository extends JpaRepository<VariationArticle, Long> {
+	 // ADD THIS NEW METHOD:
+    @EntityGraph(attributePaths = {"article", "couleur", "taille", "images"})
+    @Query("SELECT v FROM VariationArticle v")
+    List<VariationArticle> findAllWithDetails();
+    @EntityGraph(attributePaths = {"couleur", "taille", "images"})
+    @Query("SELECT v FROM VariationArticle v WHERE v.article.id IN :articleIds")
+    List<VariationArticle> findByArticleIdsWithDetails(@Param("articleIds") List<Long> articleIds);
 
     @EntityGraph(attributePaths = {"article", "couleur", "taille", "images"})
     List<VariationArticle> findByArticleIdOrderByIdAsc(Long articleId);

@@ -12,6 +12,8 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "article")
@@ -115,6 +117,10 @@ public class Article {
     @JoinColumn(name = "vendeur_id")
     private User vendeur;
 
+    // ===== ADD THIS RELATIONSHIP =====
+    @OneToMany(mappedBy = "article", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<VariationArticle> variations = new ArrayList<>();
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -146,6 +152,7 @@ public class Article {
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
     }
+    
     
     // Helper methods to get image URLs (not the data)
     public String getImageUrl1() {

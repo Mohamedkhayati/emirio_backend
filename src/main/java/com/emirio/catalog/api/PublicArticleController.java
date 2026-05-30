@@ -24,9 +24,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 import static org.springframework.http.HttpStatus.UNAUTHORIZED;
@@ -56,23 +55,51 @@ public class PublicArticleController {
         this.userRepository = userRepository;
     }
 
+    // OPTIMIZED: Load articles in one query, then load all variations in batch
     @GetMapping
     public List<ArticleListDto> list(@RequestParam(required = false) Long categorieId) {
-        List<Article> list = categorieId == null
-            ? articles.findByActifTrueOrderByIdDesc()
-            : articles.findByCategorieIdAndActifTrueOrderByIdDesc(categorieId);
-
-        return list.stream().map(a -> {
-            List<VariationArticle> vars = variations.findForApiByArticleId(a.getId());
-            return ArticleListDto.from(a, vars);
-        }).toList();
+        long startTime = System.currentTimeMillis();
+        
+        // Step 1: Load articles
+        List<Article> articleList = (categorieId == null)
+            ? articles.findAllActiveArticles()
+            : articles.findActiveByCategorieId(categorieId);
+        
+        if (articleList.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        // Step 2: Load all variations for these articles in ONE batch query
+        List<Long> articleIds = articleList.stream().map(Article::getId).collect(Collectors.toList());
+        List<VariationArticle> allVariations = variations.findByArticleIdsWithDetails(articleIds);
+        
+        // Step 3: Group variations by article ID
+        Map<Long, List<VariationArticle>> variationsByArticle = allVariations.stream()
+            .collect(Collectors.groupingBy(v -> v.getArticle().getId()));
+        
+        // Step 4: Build DTOs
+        List<ArticleListDto> result = articleList.stream()
+            .map(a -> ArticleListDto.from(a, variationsByArticle.getOrDefault(a.getId(), Collections.emptyList())))
+            .collect(Collectors.toList());
+        
+        long endTime = System.currentTimeMillis();
+        System.out.println("✅ Loaded " + result.size() + " articles with variations in " + (endTime - startTime) + " ms");
+        
+        return result;
     }
 
     @GetMapping("/{id}")
     public ArticleDetailsDto details(@PathVariable Long id) {
-        Article a = articles.findById(id)
+        long startTime = System.currentTimeMillis();
+        
+        Article a = articles.findArticleById(id)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Article not found"));
+        
         List<VariationArticle> vars = variations.findForApiByArticleId(id);
+        
+        long endTime = System.currentTimeMillis();
+        System.out.println("✅ Loaded article " + id + " in " + (endTime - startTime) + " ms");
+        
         return ArticleDetailsDto.from(a, vars);
     }
 
@@ -172,36 +199,7 @@ public class PublicArticleController {
         return builder.body(data);
     }
 
-    private static String articleImageUrl(Article a, int index) {
-        byte[] data = switch (index) {
-            case 1 -> a.getImageData1();
-            case 2 -> a.getImageData2();
-            case 3 -> a.getImageData3();
-            case 4 -> a.getImageData4();
-            default -> null;
-        };
-        return data != null && data.length > 0 ? "/api/articles/" + a.getId() + "/image/" + index : null;
-    }
-
-    private static List<String> variationImageUrls(VariationArticle v) {
-        return v.getImages().stream()
-            .map(img -> "/api/articles/variation-image/" + img.getId())
-            .toList();
-    }
-
-    private static String variationModelUrl(VariationArticle v) {
-        byte[] data = v.getModel3dData();
-        return data != null && data.length > 0 ? "/api/articles/variation-model/" + v.getId() : null;
-    }
-
-    private static String firstPreviewImage(List<VariationArticle> sameColor) {
-        return sameColor.stream()
-            .flatMap(v -> v.getImages().stream())
-            .findFirst()
-            .map(img -> "/api/articles/variation-image/" + img.getId())
-            .orElse(null);
-    }
-
+    // ========== DTO Classes (keep as they were) ==========
     @Data
     public static class ReviewCreateReq {
         @Min(1)
@@ -397,8 +395,38 @@ public class PublicArticleController {
     private static List<ColorDto> colorDtos(List<VariationArticle> vars) {
         Map<Long, List<VariationArticle>> grouped = new LinkedHashMap<>();
         for (VariationArticle v : vars) {
-            grouped.computeIfAbsent(v.getCouleur().getId(), k -> new java.util.ArrayList<>()).add(v);
+            grouped.computeIfAbsent(v.getCouleur().getId(), k -> new ArrayList<>()).add(v);
         }
         return grouped.values().stream().map(ColorDto::from).toList();
+    }
+
+    private static String articleImageUrl(Article a, int index) {
+        byte[] data = switch (index) {
+            case 1 -> a.getImageData1();
+            case 2 -> a.getImageData2();
+            case 3 -> a.getImageData3();
+            case 4 -> a.getImageData4();
+            default -> null;
+        };
+        return data != null && data.length > 0 ? "/api/articles/" + a.getId() + "/image/" + index : null;
+    }
+
+    private static List<String> variationImageUrls(VariationArticle v) {
+        return v.getImages().stream()
+            .map(img -> "/api/articles/variation-image/" + img.getId())
+            .toList();
+    }
+
+    private static String variationModelUrl(VariationArticle v) {
+        byte[] data = v.getModel3dData();
+        return data != null && data.length > 0 ? "/api/articles/variation-model/" + v.getId() : null;
+    }
+
+    private static String firstPreviewImage(List<VariationArticle> sameColor) {
+        return sameColor.stream()
+            .flatMap(v -> v.getImages().stream())
+            .findFirst()
+            .map(img -> "/api/articles/variation-image/" + img.getId())
+            .orElse(null);
     }
 }

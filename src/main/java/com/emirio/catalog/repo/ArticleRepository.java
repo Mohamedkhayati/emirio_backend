@@ -4,20 +4,33 @@ import com.emirio.catalog.Article;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 public interface ArticleRepository extends JpaRepository<Article, Long> {
 
+    // SIMPLIFIED QUERIES - load articles only, no JOIN FETCH
+    @EntityGraph(attributePaths = "categorie")
+    @Query("SELECT a FROM Article a WHERE a.actif = true ORDER BY a.id DESC")
+    List<Article> findAllActiveArticles();
+    
+    @EntityGraph(attributePaths = "categorie")
+    @Query("SELECT a FROM Article a WHERE a.categorie.id = :categorieId AND a.actif = true ORDER BY a.id DESC")
+    List<Article> findActiveByCategorieId(@Param("categorieId") Long categorieId);
+    
+    @EntityGraph(attributePaths = "categorie")
+    @Query("SELECT a FROM Article a WHERE a.id = :id")
+    Optional<Article> findArticleById(@Param("id") Long id);
+    
+    // Keep your existing methods
     @EntityGraph(attributePaths = "categorie")
     List<Article> findAllByOrderByIdDesc();
- // Find all articles owned by a seller (vendeur)
+    
     @EntityGraph(attributePaths = "categorie")
     List<Article> findByVendeurIdOrderByIdDesc(Long vendeurId);
 
-    // Check existence of SKU for a seller's article (excluding given id)
     boolean existsBySkuIgnoreCaseAndVendeurIdAndIdNot(String sku, Long vendeurId, Long id);
 
     List<Article> findByCategorieIdAndActifTrue(Long categorieId);
@@ -33,40 +46,14 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
     Optional<Article> findById(Long id);
 
     @EntityGraph(attributePaths = "categorie")
-    @Query("""
-        select a
-        from Article a
-        where a.categorie.id = :categoryId
-          and a.actif = true
-        order by a.id desc
-    """)
+    @Query("select a from Article a where a.categorie.id = :categoryId and a.actif = true order by a.id desc")
     List<Article> findByCategorieId(Long categoryId);
 
     @EntityGraph(attributePaths = "categorie")
-    @Query("""
-        select a
-        from Article a
-        where a.actif = true
-        order by a.id asc
-    """)
+    @Query("select a from Article a where a.actif = true order by a.id asc")
     List<Article> findOldArticles();
-    
-
-    @EntityGraph(attributePaths = "categorie")
-    @Query("""
-        select a
-        from Article a
-        where a.categorie.id = :categoryId
-          and a.actif = true
-        order by a.id desc
-    """)
-    List<Article> findActiveByCategorieId(Long categoryId);
 
     boolean existsBySkuIgnoreCase(String sku);
 
     boolean existsBySkuIgnoreCaseAndIdNot(String sku, Long id);
-
-    default List<Long> findBestSellerArticleIds() {
-        return Collections.emptyList();
-    }
 }

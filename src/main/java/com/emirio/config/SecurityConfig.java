@@ -53,11 +53,36 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:5173", "http://127.0.0.1:5173"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"));
-        config.setExposedHeaders(List.of("Authorization"));
+        
+        // Add ALL origins that your Flutter web might use
+        config.setAllowedOrigins(List.of(
+            "http://localhost:5173",     // React/Vite default
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",      // React default
+            "http://localhost:5000",      // Flutter web default
+            "http://localhost:56112",     // Your current Flutter port
+            "http://localhost:8080",      // Backend itself
+            "http://127.0.0.1:5000",
+            "http://127.0.0.1:56112",
+            "http://localhost:53454",     // Common Flutter random port
+            "http://localhost:53500",     // Common Flutter random port
+            "http://localhost:*",         // Any localhost port (if supported)
+            "http://192.168.1.*:*"        // Network access
+        ));
+        
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
+        config.setAllowedHeaders(List.of(
+            "Authorization", 
+            "Content-Type", 
+            "X-Requested-With", 
+            "Accept", 
+            "Origin",
+            "Access-Control-Request-Method",
+            "Access-Control-Request-Headers"
+        ));
+        config.setExposedHeaders(List.of("Authorization", "Content-Type"));
         config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
@@ -116,8 +141,7 @@ public class SecurityConfig {
                     "/api/admin/workers", "/api/admin/workers/**"
                 ).hasAuthority("Administrateur")
 
-                // Catalog endpoints - Administrateur and Gestionnaire de catalogue
-             // Catalog endpoints - Administrateur, Gestionnaire de catalogue, AND Responsable e-commerce
+                // Catalog endpoints - Administrateur, Gestionnaire de catalogue, AND Responsable e-commerce
                 .requestMatchers(
                     "/api/admin/articles", "/api/admin/articles/**",
                     "/api/admin/categories", "/api/admin/categories/**",
@@ -142,20 +166,14 @@ public class SecurityConfig {
                     "/api/admin/orders", "/api/admin/orders/**"
                 ).hasAnyAuthority("Administrateur", "Responsable e-commerce")
 
-                // ========================
-                // RECLAMATION ENDPOINTS – FIXED
-                // ========================
-                // 1. Client-only actions
+                // RECLAMATION ENDPOINTS
                 .requestMatchers(HttpMethod.POST, "/api/reclamations").hasAuthority("Client")
                 .requestMatchers(HttpMethod.GET, "/api/reclamations/my").hasAuthority("Client")
                 .requestMatchers(HttpMethod.POST, "/api/reclamations/*/client-messages").hasAuthority("Client")
-                
-                // 2. Fetch a single reclamation – allow any authenticated user (controller checks ownership)
                 .requestMatchers(HttpMethod.GET, "/api/reclamations/*").authenticated()
-                
-                // 3. All other reclamation endpoints (admin only)
                 .requestMatchers("/api/reclamations/**").hasAnyAuthority("Administrateur", "Responsable e-commerce")
                 .requestMatchers("/api/chat/send", "/api/chat/history").authenticated()
+                
                 // Admin root
                 .requestMatchers("/admin", "/admin/**").hasAnyAuthority(
                     "Administrateur", 

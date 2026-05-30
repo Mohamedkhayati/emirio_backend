@@ -147,6 +147,11 @@ public class AdminVariationController {
 
         v.setCouleur(color);
         v.setPrix(req.getPrix());
+        
+        // FIX: Check for null quantiteStock
+        if (req.getQuantiteStock() == null) {
+            throw new ResponseStatusException(BAD_REQUEST, "Stock quantity is required");
+        }
         v.setQuantiteStock(req.getQuantiteStock());
 
         if (accessory) {
@@ -310,6 +315,11 @@ public class AdminVariationController {
         @NotNull
         @Min(0)
         private Integer quantiteStock;
+        
+        // Optional: Add a method to check if the request is for an accessory
+        public boolean isAccessory() {
+            return tailleId == null;
+        }
     }
 
     @Data

@@ -57,7 +57,8 @@ public class VariationArticle {
     @Column(name = "model_3d_type")
     private String model3dType;
 
-    @OneToMany(mappedBy = "variation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    // CHANGE THIS: FetchType.EAGER -> FetchType.LAZY
+    @OneToMany(mappedBy = "variation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<VariationImage> images = new ArrayList<>();
 
     @CreatedDate

@@ -30,6 +30,7 @@ public class ActionCommande {
     @JoinColumn(name = "commande_id", nullable = false)
     private Commande commande;
 
+    // 🔽 THIS IS THE MAPPING YOU NEED
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User utilisateur;
