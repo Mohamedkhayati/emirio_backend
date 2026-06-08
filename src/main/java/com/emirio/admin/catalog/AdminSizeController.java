@@ -5,10 +5,13 @@ import com.emirio.catalog.repo.SizeRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
@@ -35,29 +38,34 @@ public class AdminSizeController {
   }
 
   @PostMapping
-  public SizeDto create(@RequestBody @Valid CreateReq req) {
+  public ResponseEntity<?> create(@RequestBody @Valid CreateReq req) {
     String pointure = req.getPointure().trim();
 
     if (repo.existsByPointureIgnoreCase(pointure)) {
-      throw new ResponseStatusException(BAD_REQUEST, "Size already exists");
+      // Return 409 CONFLICT for duplicate (more appropriate than 400)
+      return ResponseEntity
+          .status(HttpStatus.CONFLICT)
+          .body(Map.of("message", "Size already exists", "error", "Size already exists"));
     }
 
     Size s = new Size();
     s.setPointure(pointure);
-    return SizeDto.from(repo.save(s));
+    return ResponseEntity.status(HttpStatus.CREATED).body(SizeDto.from(repo.save(s)));
   }
 
   @PutMapping("/{id}")
-  public SizeDto update(@PathVariable Long id, @RequestBody @Valid CreateReq req) {
+  public ResponseEntity<?> update(@PathVariable Long id, @RequestBody @Valid CreateReq req) {
     Size s = findSize(id);
     String pointure = req.getPointure().trim();
 
     if (repo.existsByPointureIgnoreCaseAndIdNot(pointure, id)) {
-      throw new ResponseStatusException(BAD_REQUEST, "Size already exists");
+      return ResponseEntity
+          .status(HttpStatus.CONFLICT)
+          .body(Map.of("message", "Size already exists", "error", "Size already exists"));
     }
 
     s.setPointure(pointure);
-    return SizeDto.from(repo.save(s));
+    return ResponseEntity.ok(SizeDto.from(repo.save(s)));
   }
 
   @DeleteMapping("/{id}")

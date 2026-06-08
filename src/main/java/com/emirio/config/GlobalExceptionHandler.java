@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,6 +22,19 @@ public class GlobalExceptionHandler {
       "message", "Validation failed",
       "errors", errors
     ));
+  }
+
+  // THIS IS THE CRITICAL FIX - Handle ResponseStatusException first
+  @ExceptionHandler(ResponseStatusException.class)
+  public ResponseEntity<?> handleResponseStatusException(ResponseStatusException ex) {
+    // Return the original status code from the exception (BAD_REQUEST, NOT_FOUND, etc.)
+    return ResponseEntity
+      .status(ex.getStatusCode())
+      .body(Map.of(
+        "message", ex.getReason(),
+        "error", ex.getReason(),
+        "status", ex.getStatusCode().value()
+      ));
   }
 
   @ExceptionHandler(Exception.class)
