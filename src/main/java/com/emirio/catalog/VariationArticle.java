@@ -33,11 +33,13 @@ public class VariationArticle {
     private Article article;
 
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
-    @JoinColumn(name = "couleur_id", nullable = false)
+    @JoinColumn(name = "couleur_id", nullable = false, 
+                foreignKey = @ForeignKey(name = "FK_VARIATION_ARTICLE_COULEUR"))
     private Color couleur;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "taille_id")
+    @JoinColumn(name = "taille_id", 
+                foreignKey = @ForeignKey(name = "FK_VARIATION_ARTICLE_TAILLE"))
     private Size taille;
 
     @Column(name = "quantite_stock", nullable = false)
@@ -46,9 +48,10 @@ public class VariationArticle {
     @Column(nullable = false)
     private double prix;
 
+    // KEEP THESE - Many classes still reference them
     @JsonIgnore
     @Lob
-    @Column(name = "model_3d_data")
+    @Column(name = "model_3d_data", columnDefinition = "LONGBLOB")
     private byte[] model3dData;
 
     @Column(name = "model_3d_name")
@@ -57,7 +60,19 @@ public class VariationArticle {
     @Column(name = "model_3d_type")
     private String model3dType;
 
-    // CHANGE THIS: FetchType.EAGER -> FetchType.LAZY
+    // ADD THESE for file-based storage
+    @Column(name = "model_3d_file_path")
+    private String model3dFilePath;
+    
+    @Column(name = "model_3d_file_name")
+    private String model3dFileName;
+    
+    @Column(name = "model_3d_file_size")
+    private Long model3dFileSize;
+    
+    @Column(name = "model_3d_content_type")
+    private String model3dContentType;
+
     @OneToMany(mappedBy = "variation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<VariationImage> images = new ArrayList<>();
 
@@ -97,6 +112,13 @@ public class VariationArticle {
     }
     
     public String getModel3dUrl() {
-        return model3dData != null ? "/api/articles/variation-model/" + id : null;
+        // Check both file path and data
+        if (model3dFilePath != null && !model3dFilePath.isEmpty()) {
+            return "/api/variations/" + id + "/model";
+        }
+        if (model3dData != null && model3dData.length > 0) {
+            return "/api/variations/" + id + "/model";
+        }
+        return null;
     }
 }

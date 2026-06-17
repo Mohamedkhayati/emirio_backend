@@ -212,12 +212,14 @@ public class AdminVariationController {
             .body(found.getImageData());
     }
 
+ // Update getVariationModel method
     @GetMapping("/catalog/variations/{variationId}/model")
     @Transactional(readOnly = true)
     public ResponseEntity<byte[]> getVariationModel(@PathVariable Long variationId) {
         VariationArticle variation = variations.findById(variationId)
             .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Variation not found"));
 
+        // Check if we have model data
         if (variation.getModel3dData() == null || variation.getModel3dData().length == 0) {
             throw new ResponseStatusException(NOT_FOUND, "Model not found");
         }
@@ -238,30 +240,34 @@ public class AdminVariationController {
     }
 
     private void attachFiles(
-        VariationArticle variation,
-        List<MultipartFile> images,
-        MultipartFile model3d
-    ) throws IOException {
-        if (images != null && !images.isEmpty()) {
-            variation.getImages().clear();
+    	    VariationArticle variation,
+    	    List<MultipartFile> images,
+    	    MultipartFile model3d
+    	) throws IOException {
+    	    if (images != null && !images.isEmpty()) {
+    	        variation.getImages().clear();
 
-            for (MultipartFile file : images) {
-                if (file == null || file.isEmpty()) continue;
+    	        for (MultipartFile file : images) {
+    	            if (file == null || file.isEmpty()) continue;
 
-                VariationImage img = new VariationImage();
-                img.setVariation(variation);
-                img.setImageData(file.getBytes());
-                img.setImageType(file.getContentType());
-                variation.getImages().add(img);
-            }
-        }
+    	            VariationImage img = new VariationImage();
+    	            img.setVariation(variation);
+    	            img.setImageData(file.getBytes());
+    	            img.setImageType(file.getContentType());
+    	            variation.getImages().add(img);
+    	        }
+    	    }
 
-        if (model3d != null && !model3d.isEmpty()) {
-            variation.setModel3dData(model3d.getBytes());
-            variation.setModel3dName(model3d.getOriginalFilename());
-            variation.setModel3dType(model3d.getContentType());
-        }
-    }
+    	    if (model3d != null && !model3d.isEmpty()) {
+    	        // Store in database (keep existing behavior)
+    	        variation.setModel3dData(model3d.getBytes());
+    	        variation.setModel3dName(model3d.getOriginalFilename());
+    	        variation.setModel3dType(model3d.getContentType());
+    	        
+    	        // Also store file information (for future migration)
+    	        // You can add file storage logic here if needed
+    	    }
+    	}
 
     private boolean isAccessory(Article article) {
         if (article == null || article.getCategorie() == null || article.getCategorie().getNom() == null) {
@@ -369,7 +375,9 @@ public class AdminVariationController {
             dto.setModel3dName(v.getModel3dName());
             dto.setModel3dType(v.getModel3dType());
 
-            if (v.getModel3dData() != null && v.getModel3dData().length > 0) {
+            // Check both data and file path
+            if ((v.getModel3dData() != null && v.getModel3dData().length > 0) ||
+                (v.getModel3dFilePath() != null && !v.getModel3dFilePath().isEmpty())) {
                 dto.setModel3dUrl("/api/catalog/variations/" + v.getId() + "/model");
             } else {
                 dto.setModel3dUrl(null);
@@ -387,5 +395,6 @@ public class AdminVariationController {
 
             return dto;
         }
+    
     }
 }

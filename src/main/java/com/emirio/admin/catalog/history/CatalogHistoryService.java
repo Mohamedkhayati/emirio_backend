@@ -117,8 +117,11 @@ public class CatalogHistoryService {
         details.put("couleurId", v.getCouleur() != null ? v.getCouleur().getId() : null);
         details.put("tailleId", v.getTaille() != null ? v.getTaille().getId() : null);
         details.put("imagesCount", v.getImages() != null ? v.getImages().size() : 0);
-        details.put("hasModel3d", v.getModel3dData() != null && v.getModel3dData().length > 0);
-
+     // In the saveVariation method, update this line:
+        details.put("hasModel3d", 
+            (v.getModel3dData() != null && v.getModel3dData().length > 0) ||
+            (v.getModel3dFilePath() != null && !v.getModel3dFilePath().isEmpty())
+        );
         h.setDetailsJson(toJson(details));
         historyRepository.save(h);
     }

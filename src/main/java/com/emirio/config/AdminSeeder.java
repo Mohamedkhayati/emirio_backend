@@ -23,7 +23,7 @@ public class AdminSeeder {
             String email = "admin@emirio.tn";
             if (users.existsByEmailIgnoreCase(email)) return;
 
-            var adminRole = roles.findByName("ADMIN_GENERAL")
+            var adminRole = roles.findByName("Administrateur")
                     .orElseThrow(() -> new IllegalStateException("Role ADMIN_GENERAL not found"));
 
             User admin = User.builder()
